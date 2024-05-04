@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
-from PIL import Image, ImageTk
 import domain_manager_functions as dm_functions
 
 def on_add_button_click(event=None):
@@ -108,12 +107,7 @@ icon_path = 'icon/Brave_domain_blocker.ico'
 
 # Set the icon for the window
 if icon_path:
-    # Load the icon using Pillow
-    icon = Image.open(icon_path)
-    # Convert the image to a format suitable for tkinter
-    tk_icon = ImageTk.PhotoImage(icon)
-    # Set the window icon
-    root.iconphoto(True, tk_icon)
+    root.iconbitmap(icon_path)
 
 # Create a PanedWindow widget
 paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)

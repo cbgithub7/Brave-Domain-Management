@@ -27,7 +27,6 @@ def check_brave_installation():
 
 def fetch_existing_domains():
     result = execute_powershell_script("1")
-    print("Raw JSON data:", result)  # Print the raw JSON data
     try:
         existing_domains = json.loads(result)
         return existing_domains
