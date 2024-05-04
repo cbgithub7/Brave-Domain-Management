@@ -38,6 +38,9 @@ The **Brave Domain Manager** is a simple GUI application built using Python and 
 
 ## Usage
 
+> [!IMPORTANT]
+> This application needs to be run in a terminal with administrative privileges as it modifies the Windows registry. Additionally, antivirus software may trigger warnings or alerts due to registry modifications. Consider temporarily disabling antivirus software while using the application or adding an exception for domain_manager_gui.py in your antivirus settings.
+
 1. Run the application:
 
     ```bash
