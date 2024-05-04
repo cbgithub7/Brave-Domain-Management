@@ -1,6 +1,7 @@
 import subprocess
 import json
 import re
+import csv
 
 def execute_powershell_script(action, *args):
     script_path = "Manage-DomainsInRegistry.ps1"
@@ -26,45 +27,70 @@ def check_brave_installation():
 
 def fetch_existing_domains():
     result = execute_powershell_script("1")
+    print("Raw JSON data:", result)  # Print the raw JSON data
     try:
         existing_domains = json.loads(result)
         return existing_domains
     except json.decoder.JSONDecodeError as e:
         return f"Error decoding JSON: {e}\nRaw response: {result}"
 
-def add_domain(domain):
-    # Check if the domain already exists
-    existing_domains = fetch_existing_domains()
-    if domain in existing_domains:
-        return f"Domain '{domain}' already exists in the registry. No action taken."
-    
+def clean_domain(domain):
     # Regex pattern to match valid domain formats
     domain_pattern = r"^([a-zA-Z0-9-]+\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$"
 
     # Extract domain without URL prefix and path info
     cleaned_domain = re.sub(r'^(https?://)?(www\.)?', '', domain)  # Remove prefixes
-    #removed_path_info = re.findall(r'/.+', cleaned_domain)  # Find path info
     cleaned_domain = re.sub(r'/.+', '', cleaned_domain)  # Remove path info
 
-    # Extract cleaned prefixes and path info from the original input
-    '''
-    matched_prefixes = re.findall(r'^(https?://)?(www\.)?', domain)
-    cleaned_prefixes = [''.join(prefix) for prefix in matched_prefixes]
-
-    cleaned_info_msg = ""
-    if cleaned_prefixes:
-        cleaned_info_msg += f"Removed URL prefixes: {' '.join(cleaned_prefixes)}\n"
-    if removed_path_info:
-        cleaned_info_msg += f"Removed URL path: {' '.join(removed_path_info)}\n" 
-    '''
-
     if not re.match(domain_pattern, cleaned_domain):
-        return f"Invalid domain format: {domain}. Please use [subdomain].[domain].[TLD] format."
+        raise ValueError(f"Invalid domain format: {domain}. Please use [subdomain].[domain].[TLD] format.")
 
-    result = execute_powershell_script("2", cleaned_domain)
-    #return f"{cleaned_info_msg}\n{result.strip()}"
-    return f"{result.strip()}"
+    return cleaned_domain
+
+def add_domain(domain):
+    try:
+        cleaned_domain = clean_domain(domain)
+        result = execute_powershell_script("2", cleaned_domain)
+        return result.strip()
+    except ValueError as e:
+        return str(e)
 
 def remove_domain(index):
     result = execute_powershell_script("3", index)
     return result.strip()
+
+def process_text_file(file_path, update_feedback):
+    try:
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+            for line in lines:
+                domain = line.strip()
+                result = add_domain(domain)
+                update_feedback(result)
+    except Exception as e:
+        update_feedback(f"Error processing text file: {e}")
+
+def process_csv_file(file_path, update_feedback):
+    try:
+        with open(file_path, "r") as file:
+            reader = csv.reader(file)
+            for row in reader:
+                domain = row[0].strip()  # Assuming the domain is in the first column
+                result = add_domain(domain)
+                update_feedback(result)
+    except Exception as e:
+        update_feedback(f"Error processing CSV file: {e}")
+
+def process_json_file(file_path, update_feedback):
+    try:
+        new_domains = []
+        with open(file_path, "r") as file:
+            data = json.load(file)
+            for domain in data:
+                result = add_domain(domain)
+                update_feedback(result)
+                new_domains.append(domain)
+        return new_domains
+    except Exception as e:
+        update_feedback(f"Error processing JSON file: {e}")
+        return []

@@ -161,6 +161,58 @@ function Remove-DomainFromRegistry {
     }
 }
 
+# Function to add domains from a file to the registry
+function Add-DomainsFromFileToRegistry {
+    param (
+        [string]$filePath
+    )
+
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Host "This script needs to be run with administrative privileges to modify the registry. Please run the script as an administrator."
+        return
+    }
+
+    if (-not (Test-Path $filePath)) {
+        Write-Host "File '$filePath' not found."
+        return
+    }
+
+    try {
+        $domains = Get-Content $filePath
+        foreach ($domain in $domains) {
+            Add-DomainToRegistry $domain
+        }
+    } catch {
+        Write-Host "Failed to add domains from file '$filePath' to the registry: $_"
+    }
+}
+
+# Function to remove domains from a file from the registry
+function Remove-DomainsFromFileFromRegistry {
+    param (
+        [string]$filePath
+    )
+
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Host "This script needs to be run with administrative privileges to modify the registry. Please run the script as an administrator."
+        return
+    }
+
+    if (-not (Test-Path $filePath)) {
+        Write-Host "File '$filePath' not found."
+        return
+    }
+
+    try {
+        $domains = Get-Content $filePath
+        foreach ($domain in $domains) {
+            Remove-DomainFromRegistry $domain
+        }
+    } catch {
+        Write-Host "Failed to remove domains from file '$filePath' from the registry: $_"
+    }
+}
+
 # Function to check if Brave is installed
 function Test-BraveInstallation {
     $braveRegistryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -205,6 +257,16 @@ switch ($action) {
         # Check if the registry path exists
         $registryPathCheckResult = Test-RegistryPath
         Write-Output $registryPathCheckResult
+    }
+    "6" {
+        # Add domains from a file to the registry
+        $filePath = $args[1]
+        Add-DomainsFromFileToRegistry $filePath
+    }
+    "7" {
+        # Remove domains from a file from the registry
+        $filePath = $args[1]
+        Remove-DomainsFromFileFromRegistry $filePath
     }
     default {
         return "Invalid action parameter. Please provide a valid action: 1 (Fetch), 2 (Add), 3 (Remove), 4 (Check Brave installation), or 5 (Check registry path)."
