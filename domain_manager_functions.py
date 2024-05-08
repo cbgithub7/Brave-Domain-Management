@@ -60,25 +60,33 @@ def remove_domain(index):
 
 def process_text_file(file_path, update_feedback):
     try:
+        new_domains = []
         with open(file_path, "r") as file:
             lines = file.readlines()
             for line in lines:
                 domain = line.strip()
                 result = add_domain(domain)
                 update_feedback(result)
+                new_domains.append(domain)
+        return new_domains
     except Exception as e:
         update_feedback(f"Error processing text file: {e}")
+        return []
 
 def process_csv_file(file_path, update_feedback):
     try:
+        new_domains = []
         with open(file_path, "r") as file:
             reader = csv.reader(file)
             for row in reader:
                 domain = row[0].strip()  # Assuming the domain is in the first column
                 result = add_domain(domain)
                 update_feedback(result)
+                new_domains.append(domain)
+        return new_domains
     except Exception as e:
         update_feedback(f"Error processing CSV file: {e}")
+        return []
 
 def process_json_file(file_path, update_feedback):
     try:

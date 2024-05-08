@@ -204,7 +204,6 @@ function Add-DomainToRegistry {
     }
 }
 
-
 # Function to remove domain string from the registry
 function Remove-DomainFromRegistry {
     param (
