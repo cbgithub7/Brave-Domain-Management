@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
+from PIL import Image, ImageTk
 import domain_manager_functions as dm_functions
+import tkinter.font as tkfont
 
 def on_add_button_click(event=None):
     domain = add_entry.get()
@@ -8,7 +10,6 @@ def on_add_button_click(event=None):
         result = dm_functions.add_domain(domain)
         update_feedback(result)
         refresh_existing_domains()
-        # Scroll to the bottom after adding a domain
         existing_domains_listbox.yview_moveto(1.0)
 
 def on_remove_button_click():
@@ -24,13 +25,12 @@ def on_refresh_button_click():
 
 def on_file_browse_button_click():
     file_path = filedialog.askopenfilename(filetypes=[
-        ("All Files", "*.*"), 
-        ("Text Files", "*.txt"), 
-        ("CSV Files", "*.csv"), 
+        ("All Files", "*.*"),
+        ("Text Files", "*.txt"),
+        ("CSV Files", "*.csv"),
         ("JSON Files", "*.json")
     ])
     if file_path:
-        # Process the selected file
         process_file(file_path)
 
 def process_file(file_path):
@@ -55,7 +55,7 @@ def refresh_existing_domains():
 def update_feedback(message):
     feedback_text.config(state=tk.NORMAL)
     feedback_text.insert(tk.END, message + "\n\n")
-    feedback_text.see(tk.END)  # Scroll to the end
+    feedback_text.see(tk.END)
     feedback_text.config(state=tk.DISABLED)
 
 def display_brave_status():
@@ -81,12 +81,12 @@ def set_default_window_size(root, width_percent, height_percent):
 def clear_placeholder(event):
     if add_entry.get() == "Enter a domain manually":
         add_entry.delete(0, tk.END)
-        add_entry.config(fg="black")  # Change text color to black when editing
+        add_entry.config(fg="black")
 
 def add_placeholder(event):
     if not add_entry.get():
         add_entry.insert(0, "Enter a domain manually")
-        add_entry.config(fg="gray")  # Change text color to gray when not editing
+        add_entry.config(fg="gray")
 
 def search_domains(event=None):
     search_text = search_entry.get().strip().lower()
@@ -99,98 +99,140 @@ def search_domains(event=None):
     else:
         refresh_existing_domains()
 
+def underline_on_enter(event):
+    original_font = event.widget.cget("font")
+    if original_font:
+        if "underline" not in original_font:
+            font = tkfont.Font(event.widget, event.widget.cget("font"))
+            font.configure(underline=True)
+            event.widget.configure(font=font)
+            event.widget.original_font = original_font
+
+def remove_underline_on_leave(event):
+    if hasattr(event.widget, "original_font"):
+        event.widget.configure(font=event.widget.original_font)
+        del event.widget.original_font
+
 root = tk.Tk()
 root.title("Brave Domain Manager")
 
-# Define the icon file path
 icon_path = 'icon/Brave_domain_blocker.ico'
-
-# Set the icon for the window
 if icon_path:
     root.iconbitmap(icon_path)
 
-# Create a PanedWindow widget
 paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
-paned_window.pack(fill=tk.BOTH, expand=True)
+paned_window.grid(row=0, column=0, sticky="nsew")
 
-# Create left frame for input elements
 left_frame = tk.Frame(paned_window)
-left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)  # Set expand to False
+left_frame.grid(row=0, column=0, sticky="nsew")
 
-# Create right frame for output elements
+left_frame.grid_rowconfigure(0, weight=0)
+left_frame.grid_columnconfigure(0, weight=1)
+
 right_frame = tk.Frame(paned_window)
-right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)  # Set expand to True
+right_frame.grid(row=0, column=1, sticky="nsew")
 
-# Add left and right frames to the PanedWindow
+right_frame.grid_rowconfigure(0, weight=0)
+right_frame.grid_columnconfigure(0, weight=1)
+
 paned_window.add(left_frame)
 paned_window.add(right_frame)
 
+undo_icon = Image.open("icon/undo_icon.png").resize((20, 20), Image.LANCZOS)
+redo_icon = Image.open("icon/redo_icon.png").resize((20, 20), Image.LANCZOS)
+
+undo_image = ImageTk.PhotoImage(undo_icon)
+redo_image = ImageTk.PhotoImage(redo_icon)
+
+undo_redo_frame = tk.Frame(left_frame)
+undo_redo_frame.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
+undo_button = tk.Button(undo_redo_frame, text="Undo", image=undo_image, compound=tk.LEFT, command=dm_functions.undo_action, bd=2, relief=tk.RAISED)
+undo_button.grid(row=0, column=0, padx=(0, 5), pady=0, sticky="ew")
+
+redo_button = tk.Button(undo_redo_frame, text="Redo", image=redo_image, compound=tk.LEFT, command=dm_functions.redo_action, bd=2, relief=tk.RAISED)
+redo_button.grid(row=0, column=1, padx=(5, 0), pady=0, sticky="ew")
+
+# Make buttons full frame width
+undo_redo_frame.grid_columnconfigure(0, weight=1)
+undo_redo_frame.grid_columnconfigure(1, weight=1)
+
 add_label = tk.Label(left_frame, text="Add Domain:")
-add_label.pack(anchor=tk.W)
+add_label.grid(row=1, column=0, columnspan=2, sticky="w")
+
 add_entry = tk.Entry(left_frame, width=30)
-add_entry.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
-add_entry.insert(0, "Enter a domain manually")  # Placeholder text
-add_entry.config(fg="gray")  # Set text color to gray
-add_entry.bind("<FocusIn>", clear_placeholder)  # Clear placeholder text when focused
-add_entry.bind("<FocusOut>", add_placeholder)  # Add placeholder text when focus is lost
+add_entry.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+add_entry.insert(0, "Enter a domain manually")
+add_entry.config(fg="gray")
+add_entry.bind("<FocusIn>", clear_placeholder)
+add_entry.bind("<FocusOut>", add_placeholder)
 add_entry.bind("<Return>", on_add_button_click)
 
 add_button = tk.Button(left_frame, text="Add", command=on_add_button_click)
-add_button.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
+add_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
 add_from_file_label = tk.Label(left_frame, text="Add from File:")
-add_from_file_label.pack(anchor=tk.W)
+add_from_file_label.grid(row=4, column=0, columnspan=2, sticky="w")
 
 browse_button = tk.Button(left_frame, text="Browse", command=on_file_browse_button_click)
-browse_button.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
+browse_button.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
 file_format_text = tk.Label(left_frame, text="Supported File Formats:\nText File (.txt): One domain per line.\nCSV File (.csv): One domain per row.\nJSON File (.json): Array of domain strings.")
-file_format_text.pack(anchor=tk.W)
+file_format_text.grid(row=6, column=0, columnspan=2, sticky="w")
 
-search_label = tk.Label(right_frame, text="Search Domain:")
-search_label.pack(anchor=tk.W)
+search_label = tk.Label(right_frame, text="Search Domains:")
+search_label.grid(row=0, column=0, sticky="w")
+
 search_entry = tk.Entry(right_frame, width=30)
-search_entry.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
+search_entry.grid(row=1, column=0, padx=5, pady=5, sticky="ew")
 search_entry.bind("<KeyRelease>", search_domains)
 
-existing_domains_label = tk.Label(right_frame, text="Existing Domains:")
-existing_domains_label.pack(anchor=tk.W)
+existing_domains_label = tk.Label(right_frame, text="Blocked Domains:")
+existing_domains_label.grid(row=2, column=0, sticky="w")
 
 existing_domains_frame = tk.Frame(right_frame)
-existing_domains_frame.pack(expand=True, fill=tk.BOTH)
+existing_domains_frame.grid(row=3, column=0, padx=5, pady=5, sticky="nsew")
 
-existing_domains_listbox = tk.Listbox(existing_domains_frame, width=40, height=10, selectmode=tk.SINGLE)
-existing_domains_listbox.pack(side=tk.LEFT, padx=5, fill=tk.BOTH, expand=True)
+existing_domains_listbox = tk.Listbox(existing_domains_frame, width=40, height=10, selectmode=tk.EXTENDED)
+existing_domains_listbox.grid(row=0, column=0, padx=(5, 0), pady=5, sticky="nsew")
 
 scrollbar = tk.Scrollbar(existing_domains_frame, orient=tk.VERTICAL)
-scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+scrollbar.grid(row=0, column=1, padx=(0, 5), pady=5, sticky="ns")
 
 existing_domains_listbox.config(yscrollcommand=scrollbar.set)
 scrollbar.config(command=existing_domains_listbox.yview)
 
-# Create a frame for the remove and refresh buttons
 button_frame = tk.Frame(right_frame)
-button_frame.pack(anchor=tk.CENTER, padx=5, pady=5)
+button_frame.grid(row=4, column=0, padx=5, pady=5, sticky="ew")
 
 remove_button = tk.Button(button_frame, text="Remove", command=on_remove_button_click, width=10)
-remove_button.pack(side=tk.LEFT, padx=5)
+remove_button.grid(row=0, column=0, padx=5, sticky="ew")
 
 refresh_button = tk.Button(button_frame, text="Refresh", command=on_refresh_button_click, width=10)
-refresh_button.pack(side=tk.LEFT, padx=5)
+refresh_button.grid(row=0, column=1, padx=5, sticky="ew")
 
 feedback_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=50, height=10)
-feedback_text.pack(side=tk.BOTTOM, padx=10, pady=10, fill=tk.BOTH, expand=True)
+feedback_text.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
 
-# Display Brave installation status
+add_button.bind("<Enter>", underline_on_enter)
+add_button.bind("<Leave>", remove_underline_on_leave)
+remove_button.bind("<Enter>", underline_on_enter)
+remove_button.bind("<Leave>", remove_underline_on_leave)
+refresh_button.bind("<Enter>", underline_on_enter)
+refresh_button.bind("<Leave>", remove_underline_on_leave)
+undo_button.bind("<Enter>", underline_on_enter)
+undo_button.bind("<Leave>", remove_underline_on_leave)
+redo_button.bind("<Enter>", underline_on_enter)
+redo_button.bind("<Leave>", remove_underline_on_leave)
+browse_button.bind("<Enter>", underline_on_enter)
+browse_button.bind("<Leave>", remove_underline_on_leave)
+
 display_brave_status()
-
-# Display registry path check result
 display_registry_path()
-
-# Refresh existing domains
 refresh_existing_domains()
 
-# Set default window size as a percentage of screen size
 set_default_window_size(root, 46, 46)
+root.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(0, weight=1)
 
 root.mainloop()

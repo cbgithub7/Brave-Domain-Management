@@ -93,3 +93,17 @@ def process_json_file(file_path, update_feedback):
     except Exception as e:
         update_feedback(f"Error processing JSON file: {e}")
         return []
+    
+def undo_action():
+    # Call PowerShell script to perform undo action
+    try:
+        subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", "Manage-DomainsInRegistry.ps1", "Undo-Action"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing undo action: {e}")
+
+def redo_action():
+    # Call PowerShell script to perform redo action
+    try:
+        subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", "Manage-DomainsInRegistry.ps1", "Redo-Action"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing redo action: {e}")
