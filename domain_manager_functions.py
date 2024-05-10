@@ -2,6 +2,7 @@ import subprocess
 import json
 import re
 import csv
+import os
 
 def execute_powershell_script(action, *args):
     script_path = "Manage-DomainsInRegistry.ps1"
@@ -60,47 +61,37 @@ def remove_domain(index):
 
 def process_text_file(file_path, update_feedback):
     try:
-        new_domains = []
+        file_name = os.path.basename(file_path)  # Extract the file name
         with open(file_path, "r") as file:
-            lines = file.readlines()
-            for line in lines:
+            for line in file:
                 domain = line.strip()
                 result = add_domain(domain)
-                update_feedback(result)
-                new_domains.append(domain)
-        return new_domains
+                yield file_name, result, domain  # Adjust the order of values being yielded
     except Exception as e:
         update_feedback(f"Error processing text file: {e}")
-        return []
 
 def process_csv_file(file_path, update_feedback):
     try:
-        new_domains = []
+        file_name = os.path.basename(file_path)  # Extract the file name
         with open(file_path, "r") as file:
             reader = csv.reader(file)
             for row in reader:
                 domain = row[0].strip()  # Assuming the domain is in the first column
                 result = add_domain(domain)
-                update_feedback(result)
-                new_domains.append(domain)
-        return new_domains
+                yield file_name, result, domain  # Adjust the order of values being yielded
     except Exception as e:
         update_feedback(f"Error processing CSV file: {e}")
-        return []
 
 def process_json_file(file_path, update_feedback):
     try:
-        new_domains = []
+        file_name = os.path.basename(file_path)  # Extract the file name
         with open(file_path, "r") as file:
             data = json.load(file)
             for domain in data:
                 result = add_domain(domain)
-                update_feedback(result)
-                new_domains.append(domain)
-        return new_domains
+                yield file_name, result, domain  # Adjust the order of values being yielded
     except Exception as e:
         update_feedback(f"Error processing JSON file: {e}")
-        return []
     
 def undo_action():
     # Call PowerShell script to perform undo action

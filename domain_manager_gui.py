@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHB
     QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QAction, QSizePolicy, \
     QDesktopWidget, QToolBar, QAbstractItemView
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QSize, QObject, pyqtSlot
+from PyQt5.QtCore import Qt, QSize, QEventLoop
 from qtwidgets import AnimatedToggle  # Import AnimatedToggle from qtwidgets
 import domain_manager_functions as dm_functions
 import qdarktheme
@@ -140,6 +140,10 @@ class DomainManagerGUI(QMainWindow):
         self.feedback_text.setReadOnly(True)
         self.main_layout.addWidget(self.feedback_text)
 
+        # Feedback label for displaying the current domain being processed
+        self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
+        self.main_layout.addWidget(self.current_domain_label)
+
         # Apply the theme after all necessary widgets are initialized
         self.apply_theme()
 
@@ -181,19 +185,36 @@ class DomainManagerGUI(QMainWindow):
             result = dm_functions.add_domain(domain)
             self.update_feedback(result)
             self.refresh_existing_domains()
-            self.existing_domains_list.scrollToBottom()
+            self.update_current_domain(domain, action_type="Adding", final_message=True, single_domain=True)
 
-            # Clear input field and return to placeholder text
+            # Highlight the newly added domain
+            cleaned_domain = dm_functions.clean_domain(domain)
+            items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
+            if items:
+                item = items[0]
+                item.setSelected(True)
+                self.existing_domains_list.scrollToItem(item, QAbstractItemView.PositionAtTop)
+
             self.add_entry.clear()
             self.add_entry.setFocus()
 
     def on_remove_button_click(self):
         selected_items = self.existing_domains_list.selectedItems()
         if selected_items:
+            # Check if only one item is selected
+            single_domain = len(selected_items) == 1
             for item in selected_items:
-                result = dm_functions.remove_domain(item.text())
+                domain = item.text()
+                result = dm_functions.remove_domain(domain)
                 self.update_feedback(result)
+                self.update_current_domain(domain, action_type="Removing", single_domain=single_domain)
+                QEventLoop().processEvents()  # Process GUI events to update the display
+
+            # After all domains are removed, refresh the existing domains list
             self.refresh_existing_domains()
+
+            # Display the final success message
+            self.update_current_domain(domain, action_type="Removing", final_message=True, single_domain=single_domain)
 
     def on_delete_key_press(self):
         if self.existing_domains_list.hasFocus():
@@ -221,19 +242,30 @@ class DomainManagerGUI(QMainWindow):
             self.process_file(file_path)
 
     def process_file(self, file_path):
-        file_extension = file_path.split(".")[-1]
-        update_feedback = self.update_feedback
-        try:
-            if file_extension == "txt":
-                new_domains = dm_functions.process_text_file(file_path, update_feedback)
-            elif file_extension == "csv":
-                new_domains = dm_functions.process_csv_file(file_path, update_feedback)
-            elif file_extension == "json":
-                new_domains = dm_functions.process_json_file(file_path, update_feedback)
+        try:    
+            # Function to process the selected file
+            if file_path.endswith('.txt'):
+                processing_function = dm_functions.process_text_file
+            elif file_path.endswith('.csv'):
+                processing_function = dm_functions.process_csv_file
+            elif file_path.endswith('.json'):
+                processing_function = dm_functions.process_json_file
             else:
-                self.update_feedback("Unsupported file format.")
+                self.update_feedback("Unsupported file format. Please select a .txt, .csv, or .json file.")
                 return
-            
+
+            # Create a QEventLoop to process events
+            loop = QEventLoop()
+            new_domains = []
+
+            for file_name, result, domain in processing_function(file_path, self.update_feedback):
+                self.update_feedback(result)
+                self.update_current_domain(domain, action_type="Adding", final_message=False)
+                # Process events to update the GUI
+                loop.processEvents(QEventLoop.AllEvents | QEventLoop.WaitForMoreEvents)
+
+                new_domains.append(domain)
+
             self.refresh_existing_domains()
 
             # Update existing domains list with newly added domains highlighted
@@ -245,8 +277,48 @@ class DomainManagerGUI(QMainWindow):
                         item.setSelected(True)
                         self.existing_domains_list.scrollToItem(item)
             
+            # Display final success message with the file name
+            self.update_current_domain("", action_type="Adding", final_message=True, file_name=file_name)
+            
         except Exception as e:
-            update_feedback(f"Error processing file: {e}")
+            self.update_feedback(f"Error processing file: {e}")
+
+    def update_current_domain(self, domain, action_type, final_message=False, single_domain=False, file_name=None):
+        if len(domain) > 100:  # Adjust this threshold as needed
+            domain = domain[:97] + "..."  # Truncate long domain names
+        
+        if action_type == "Adding":
+            if file_name:
+                message = f"Adding {domain} from {file_name} to the block list."
+            else:
+                message = f"Adding {domain} to the block list."
+        elif action_type == "Removing":
+            message = f"Removing {domain} from the block list."
+        else:
+            message = f"{action_type} {domain}"
+        
+        self.current_domain_label.setText(message)
+        
+        if final_message:
+            if action_type == "Adding":
+                if single_domain:
+                    success_message = f"The domain {domain} has been successfully added to the block list."
+                else:
+                    success_message = f"All domains from {file_name} have been successfully added to the block list."
+            elif action_type == "Removing":
+                if single_domain:
+                    success_message = f"The domain {domain} has been successfully removed from the block list."
+                else:
+                    success_message = "All selected domains have been successfully removed from the block list."
+            else:
+                success_message = "Operation completed successfully."
+            
+            self.current_domain_label.setText(success_message)
+
+    def update_feedback(self, message):
+        # Function to update the feedback text
+        current_text = self.feedback_text.toPlainText()
+        self.feedback_text.setPlainText(current_text + message + "\n")
 
     def display_brave_status(self):
         result = dm_functions.check_brave_installation()
