@@ -1,3 +1,79 @@
+# Global variables to store user action history
+$global:userActionHistory = @()
+$global:undoStack = @()
+$global:redoStack = @()
+
+# Function to add an action to the user action history
+function Add-UserAction {
+    param (
+        [string]$action,
+        [string[]]$parameters,
+        [string]$result
+    )
+    $userAction = @{
+        Action = $action
+        Parameters = $parameters
+        Result = $result
+    }
+    $global:userActionHistory += $userAction
+}
+
+# Function to undo the last action
+function Undo-Action {
+    if ($userActionHistory.Count -gt 0) {
+        $lastAction = $userActionHistory[-1]
+        $action = $lastAction.Action
+        $parameters = $lastAction.Parameters
+
+        # Remove the last action from the history
+        $global:userActionHistory = $userActionHistory[0..($userActionHistory.Count - 2)]
+
+        # Add the action to the redo stack
+        $global:redoStack += $lastAction
+
+        # Undo the action
+        if ($action -eq "Add-DomainToRegistry") {
+            Remove-DomainFromRegistry -indexToRemove $parameters[0]
+        } elseif ($action -eq "Add-DomainsFromFileToRegistry") {
+            Remove-DomainsFromFileFromRegistry -filePath $parameters[0]
+        } elseif ($action -eq "Remove-DomainFromRegistry") {
+            Add-DomainToRegistry -domainToAdd $parameters[0]
+        }
+
+        Write-Output "Undo: $action"
+    } else {
+        Write-Output "No actions to undo."
+    }
+}
+
+# Function to redo the last undone action
+function Redo-Action {
+    if ($redoStack.Count -gt 0) {
+        $lastRedo = $global:redoStack[-1]
+        $action = $lastRedo.Action
+        $parameters = $lastRedo.Parameters
+
+        # Remove the last redo from the redo stack
+        $global:redoStack = $redoStack[0..($redoStack.Count - 2)]
+
+        # Add the redo action back to the user action history
+        $global:userActionHistory += $lastRedo
+
+        # Redo the action
+        if ($action -eq "Add-DomainToRegistry") {
+            Add-DomainToRegistry -domainToAdd $parameters[0]
+        } elseif ($action -eq "Add-DomainsFromFileToRegistry") {
+            Add-DomainsFromFileToRegistry -filePath $parameters[0]
+        } elseif ($action -eq "Remove-DomainFromRegistry") {
+            Remove-DomainFromRegistry -indexToRemove $parameters[0]
+        }
+
+        Write-Output "Redo: $action"
+    } else {
+        Write-Output "No actions to redo."
+    }
+}
+
 # Function to check if the registry path exists
 function Test-RegistryPath {
     $path = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave\URLBlocklist"
@@ -127,7 +203,6 @@ function Add-DomainToRegistry {
         }
     }
 }
-
 
 # Function to remove domain string from the registry
 function Remove-DomainFromRegistry {

@@ -1,196 +1,362 @@
-import tkinter as tk
-from tkinter import filedialog, scrolledtext
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
+    QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QAction, QSizePolicy, \
+    QDesktopWidget, QToolBar, QAbstractItemView
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, QSize, QEventLoop
+from qtwidgets import AnimatedToggle  # Import AnimatedToggle from qtwidgets
 import domain_manager_functions as dm_functions
+import qdarktheme
 
-def on_add_button_click(event=None):
-    domain = add_entry.get()
-    if domain:
-        result = dm_functions.add_domain(domain)
-        update_feedback(result)
-        refresh_existing_domains()
-        # Scroll to the bottom after adding a domain
-        existing_domains_listbox.yview_moveto(1.0)
+class DomainManagerGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Brave Domain Manager")
+        self.setWindowIcon(QIcon("icon/Brave_domain_blocker.ico"))
 
-def on_remove_button_click():
-    index = existing_domains_listbox.curselection()
-    if index:
-        result = dm_functions.remove_domain(existing_domains_listbox.get(index))
-        update_feedback(result)
-        refresh_existing_domains()
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
 
-def on_refresh_button_click():
-    refresh_existing_domains()
-    update_feedback("List refreshed.")
+        self.main_layout = QVBoxLayout(self.central_widget)
 
-def on_file_browse_button_click():
-    file_path = filedialog.askopenfilename(filetypes=[
-        ("All Files", "*.*"), 
-        ("Text Files", "*.txt"), 
-        ("CSV Files", "*.csv"), 
-        ("JSON Files", "*.json")
-    ])
-    if file_path:
-        # Process the selected file
-        process_file(file_path)
+        # Create toolbar
+        self.toolbar = QToolBar()
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # Display text beside icon
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
 
-def process_file(file_path):
-    if file_path.endswith(".txt"):
-        new_domains = dm_functions.process_text_file(file_path, update_feedback)
-    elif file_path.endswith(".csv"):
-        new_domains = dm_functions.process_csv_file(file_path, update_feedback)
-    elif file_path.endswith(".json"):
-        new_domains = dm_functions.process_json_file(file_path, update_feedback)
-    else:
-        update_feedback("Unsupported file format.")
-        return
+        # Toolbar actions
+        self.undo_action = QAction(QIcon("icon/undo_icon.png"), "Undo", self)
+        self.undo_action.triggered.connect(dm_functions.undo_action)
+        self.toolbar.addAction(self.undo_action)
 
-    refresh_existing_domains()
+        self.redo_action = QAction(QIcon("icon/redo_icon.png"), "Redo", self)
+        self.redo_action.triggered.connect(dm_functions.redo_action)
+        self.toolbar.addAction(self.redo_action)
 
-def refresh_existing_domains():
-    existing_domains_listbox.delete(0, tk.END)
-    existing_domains = dm_functions.fetch_existing_domains()
-    for domain in existing_domains:
-        existing_domains_listbox.insert(tk.END, domain)
+        # Add AnimatedToggle widget for theme switching
+        self.theme_toggle_switch = AnimatedToggle(
+            checked_color="#FFB000",
+            pulse_checked_color="#44FFB000"
+        )
+        
+        # Add spacer to push the toggle switch to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.toolbar.addWidget(spacer)
 
-def update_feedback(message):
-    feedback_text.config(state=tk.NORMAL)
-    feedback_text.insert(tk.END, message + "\n\n")
-    feedback_text.see(tk.END)  # Scroll to the end
-    feedback_text.config(state=tk.DISABLED)
+        # Add the toggle switch to the toolbar
+        self.toolbar.addWidget(self.theme_toggle_switch)
+        self.theme_toggle_switch.toggled.connect(self.toggle_theme)
 
-def display_brave_status():
-    brave_installed = dm_functions.check_brave_installation()
-    if brave_installed:
-        update_feedback("Brave is installed on this system.")
-    else:
-        update_feedback("Brave is not installed on this system.")
+        # Set initial state based on saved preference or default
+        self.dark_theme_enabled = False  # Set default to dark theme
+        self.load_theme_preference()
 
-def display_registry_path():
-    path_result = dm_functions.check_registry_path()
-    update_feedback(path_result)
+        # Calculate window size based on screen size
+        screen = QDesktopWidget().screenGeometry()
+        window_width = int(screen.width() * 0.46)
+        window_height = int(screen.height() * 0.46)
+        self.resize(QSize(window_width, window_height))
 
-def set_default_window_size(root, width_percent, height_percent):
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
+        # Upper Frame
+        self.upper_frame = QWidget()
+        self.upper_layout = QHBoxLayout(self.upper_frame)
 
-    default_width = int(screen_width * width_percent / 100)
-    default_height = int(screen_height * height_percent / 100)
+        # Left Frame
+        self.left_frame = QWidget()
+        self.left_layout = QVBoxLayout(self.left_frame)
+        self.left_layout.setAlignment(Qt.AlignTop)  # Align at the top
+        self.left_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.left_frame.setMinimumWidth(int(window_width * 1/3))
+        self.left_frame.setMaximumWidth(int(window_width * 1/3))
 
-    root.geometry(f"{default_width}x{default_height}")
+        self.add_label = QLabel("Add Domain: (Click Add or press Enter)")
+        self.left_layout.addWidget(self.add_label)
 
-def clear_placeholder(event):
-    if add_entry.get() == "Enter a domain manually":
-        add_entry.delete(0, tk.END)
-        add_entry.config(fg="black")  # Change text color to black when editing
+        self.add_entry = QLineEdit()
+        self.add_entry.setPlaceholderText("Enter a domain manually")
+        self.add_entry.returnPressed.connect(self.on_add_button_click)
+        self.left_layout.addWidget(self.add_entry)
 
-def add_placeholder(event):
-    if not add_entry.get():
-        add_entry.insert(0, "Enter a domain manually")
-        add_entry.config(fg="gray")  # Change text color to gray when not editing
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(self.on_add_button_click)
+        self.left_layout.addWidget(self.add_button)
 
-def search_domains(event=None):
-    search_text = search_entry.get().strip().lower()
-    existing_domains_listbox.delete(0, tk.END)
-    if search_text:
+        self.add_from_file_label = QLabel("Add from File:")
+        self.left_layout.addWidget(self.add_from_file_label)
+
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.on_file_browse_button_click)
+        self.left_layout.addWidget(self.browse_button)
+
+        self.file_format_text = QLabel(
+            "Supported File Formats:\nText File (.txt): One domain per line.\nCSV File (.csv): One domain per row.\nJSON File (.json): Array of domain strings."
+        )
+        self.left_layout.addWidget(self.file_format_text)
+
+        self.upper_layout.addWidget(self.left_frame)
+
+        # Right Frame
+        self.right_frame = QWidget()
+        self.right_layout = QVBoxLayout(self.right_frame)
+        self.right_layout.setAlignment(Qt.AlignTop)  # Align at the top
+        self.right_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.right_frame.setMinimumWidth(int(window_width * 2/3))
+        self.right_frame.setMaximumWidth(int(window_width * 2/3))
+
+        self.search_label = QLabel("Search Domains:")
+        self.right_layout.addWidget(self.search_label)
+
+        self.search_entry = QLineEdit()
+        self.search_entry.textChanged.connect(self.search_domains)  # Dynamic search
+        self.right_layout.addWidget(self.search_entry)
+
+        self.existing_domains_label = QLabel("Blocked Domains:")
+        self.right_layout.addWidget(self.existing_domains_label)
+
+        self.existing_domains_list = QListWidget()
+        self.existing_domains_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.right_layout.addWidget(self.existing_domains_list)
+
+        self.button_frame = QWidget()
+        self.button_layout = QHBoxLayout(self.button_frame)
+
+        self.remove_button = QPushButton("Remove")
+        self.remove_button.clicked.connect(self.on_remove_button_click)
+        self.button_layout.addWidget(self.remove_button)
+
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.on_refresh_button_click)
+        self.button_layout.addWidget(self.refresh_button)
+
+        self.right_layout.addWidget(self.button_frame)
+
+        self.upper_layout.addWidget(self.right_frame)
+
+        self.main_layout.addWidget(self.upper_frame)
+
+        # Feedback Text
+        self.feedback_text = QTextEdit()
+        self.feedback_text.setReadOnly(True)
+        self.main_layout.addWidget(self.feedback_text)
+
+        # Feedback label for displaying the current domain being processed
+        self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
+        self.main_layout.addWidget(self.current_domain_label)
+
+        # Apply the theme after all necessary widgets are initialized
+        self.apply_theme()
+
+        self.display_brave_status()
+        self.display_registry_path()
+        self.refresh_existing_domains()
+
+    def toggle_theme(self, state):
+        self.dark_theme_enabled = state  # state is True for dark theme, False for light theme
+        self.save_theme_preference()
+        self.apply_theme()
+
+    def apply_theme(self):
+        if self.dark_theme_enabled:
+            qdarktheme.setup_theme("dark")
+            placeholder_color = "#CCCCCC"
+            text_color = "white"  # Lighter color for dark theme
+        else:
+            qdarktheme.setup_theme("light")
+            placeholder_color = "#666666"
+            text_color = "black"  # Black color for light theme
+            
+        # Set placeholder text color for add_entry QLineEdit
+        self.add_entry.setStyleSheet("QLineEdit { color: %s; }"
+                                    "QLineEdit::placeholder { color: %s; }"
+                                    "QLineEdit:focus { color: %s; }" % (text_color, placeholder_color, text_color))
+
+    def save_theme_preference(self):
+        # Save the current theme preference (e.g., to a settings file or database)
+        pass
+
+    def load_theme_preference(self):
+        # Load the saved theme preference (e.g., from a settings file or database)
+        pass
+
+    def on_add_button_click(self):
+        domain = self.add_entry.text()
+        if domain:
+            result = dm_functions.add_domain(domain)
+            self.update_feedback(result)
+            self.refresh_existing_domains()
+            self.update_current_domain(domain, action_type="Adding", final_message=True, single_domain=True)
+
+            # Highlight the newly added domain
+            cleaned_domain = dm_functions.clean_domain(domain)
+            items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
+            if items:
+                item = items[0]
+                item.setSelected(True)
+                self.existing_domains_list.scrollToItem(item, QAbstractItemView.PositionAtTop)
+
+            self.add_entry.clear()
+            self.add_entry.setFocus()
+
+    def on_remove_button_click(self):
+        selected_items = self.existing_domains_list.selectedItems()
+        if selected_items:
+            # Check if only one item is selected
+            single_domain = len(selected_items) == 1
+            for item in selected_items:
+                domain = item.text()
+                result = dm_functions.remove_domain(domain)
+                self.update_feedback(result)
+                self.update_current_domain(domain, action_type="Removing", single_domain=single_domain)
+                QEventLoop().processEvents()  # Process GUI events to update the display
+
+            # After all domains are removed, refresh the existing domains list
+            self.refresh_existing_domains()
+
+            # Display the final success message
+            self.update_current_domain(domain, action_type="Removing", final_message=True, single_domain=single_domain)
+
+    def on_delete_key_press(self):
+        if self.existing_domains_list.hasFocus():
+            selected_items = self.existing_domains_list.selectedItems()
+            if selected_items:
+                for item in selected_items:
+                    self.on_remove_button_click()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            self.on_delete_key_press()
+
+    def on_refresh_button_click(self):
+        self.refresh_existing_domains()
+        self.update_feedback("List refreshed.")
+
+    def on_file_browse_button_click(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select File",
+            "",
+            "All Files (*);;Text Files (*.txt);;CSV Files (*.csv);;JSON Files (*.json)"
+        )
+        if file_path:
+            self.process_file(file_path)
+
+    def process_file(self, file_path):
+        try:    
+            # Function to process the selected file
+            if file_path.endswith('.txt'):
+                processing_function = dm_functions.process_text_file
+            elif file_path.endswith('.csv'):
+                processing_function = dm_functions.process_csv_file
+            elif file_path.endswith('.json'):
+                processing_function = dm_functions.process_json_file
+            else:
+                self.update_feedback("Unsupported file format. Please select a .txt, .csv, or .json file.")
+                return
+
+            # Create a QEventLoop to process events
+            loop = QEventLoop()
+            new_domains = []
+
+            for file_name, result, domain in processing_function(file_path, self.update_feedback):
+                self.update_feedback(result)
+                self.update_current_domain(domain, action_type="Adding", final_message=False)
+                # Process events to update the GUI
+                loop.processEvents(QEventLoop.AllEvents | QEventLoop.WaitForMoreEvents)
+
+                new_domains.append(domain)
+
+            self.refresh_existing_domains()
+
+            # Update existing domains list with newly added domains highlighted
+            for domain in new_domains:
+                cleaned_domain = dm_functions.clean_domain(domain)  # Clean the domain
+                items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
+                if items:
+                    for item in items:
+                        item.setSelected(True)
+                        self.existing_domains_list.scrollToItem(item)
+            
+            # Display final success message with the file name
+            self.update_current_domain("", action_type="Adding", final_message=True, file_name=file_name)
+            
+        except Exception as e:
+            self.update_feedback(f"Error processing file: {e}")
+
+    def update_current_domain(self, domain, action_type, final_message=False, single_domain=False, file_name=None):
+        if len(domain) > 100:  # Adjust this threshold as needed
+            domain = domain[:97] + "..."  # Truncate long domain names
+        
+        if action_type == "Adding":
+            if file_name:
+                message = f"Adding {domain} from {file_name} to the block list."
+            else:
+                message = f"Adding {domain} to the block list."
+        elif action_type == "Removing":
+            message = f"Removing {domain} from the block list."
+        else:
+            message = f"{action_type} {domain}"
+        
+        self.current_domain_label.setText(message)
+        
+        if final_message:
+            if action_type == "Adding":
+                if single_domain:
+                    success_message = f"The domain {domain} has been successfully added to the block list."
+                else:
+                    success_message = f"All domains from {file_name} have been successfully added to the block list."
+            elif action_type == "Removing":
+                if single_domain:
+                    success_message = f"The domain {domain} has been successfully removed from the block list."
+                else:
+                    success_message = "All selected domains have been successfully removed from the block list."
+            else:
+                success_message = "Operation completed successfully."
+            
+            self.current_domain_label.setText(success_message)
+
+    def update_feedback(self, message):
+        # Function to update the feedback text
+        current_text = self.feedback_text.toPlainText()
+        self.feedback_text.setPlainText(current_text + message + "\n")
+
+    def display_brave_status(self):
+        result = dm_functions.check_brave_installation()
+        if result:  # If result is True, Brave is installed
+            message = "Brave is installed on this system."
+        else:  # If result is False, Brave is not installed
+            message = "Brave is not installed on this system."
+        self.update_feedback(message)
+
+    def display_registry_path(self):
+        path_result = dm_functions.check_registry_path()
+        self.update_feedback(path_result)
+
+    def refresh_existing_domains(self):
+        self.existing_domains_list.clear()
         existing_domains = dm_functions.fetch_existing_domains()
-        for domain in existing_domains:
-            if search_text in domain.lower():
-                existing_domains_listbox.insert(tk.END, domain)
-    else:
-        refresh_existing_domains()
+        if isinstance(existing_domains, list):
+            self.existing_domains_list.addItems(existing_domains)
+        else:
+            self.update_feedback(existing_domains)
 
-root = tk.Tk()
-root.title("Brave Domain Manager")
+    def search_domains(self):
+        search_text = self.search_entry.text()
+        existing_domains = dm_functions.fetch_existing_domains()
+        self.existing_domains_list.clear()
+        if isinstance(existing_domains, list):
+            matching_domains = [domain for domain in existing_domains if search_text.lower() in domain.lower()]
+            self.existing_domains_list.addItems(matching_domains)
+        else:
+            self.update_feedback(existing_domains)
 
-# Define the icon file path
-icon_path = 'icon/Brave_domain_blocker.ico'
+    def update_feedback(self, message):
+        self.feedback_text.append(message)
 
-# Set the icon for the window
-if icon_path:
-    root.iconbitmap(icon_path)
-
-# Create a PanedWindow widget
-paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
-paned_window.pack(fill=tk.BOTH, expand=True)
-
-# Create left frame for input elements
-left_frame = tk.Frame(paned_window)
-left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)  # Set expand to False
-
-# Create right frame for output elements
-right_frame = tk.Frame(paned_window)
-right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)  # Set expand to True
-
-# Add left and right frames to the PanedWindow
-paned_window.add(left_frame)
-paned_window.add(right_frame)
-
-add_label = tk.Label(left_frame, text="Add Domain:")
-add_label.pack(anchor=tk.W)
-add_entry = tk.Entry(left_frame, width=30)
-add_entry.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
-add_entry.insert(0, "Enter a domain manually")  # Placeholder text
-add_entry.config(fg="gray")  # Set text color to gray
-add_entry.bind("<FocusIn>", clear_placeholder)  # Clear placeholder text when focused
-add_entry.bind("<FocusOut>", add_placeholder)  # Add placeholder text when focus is lost
-add_entry.bind("<Return>", on_add_button_click)
-
-add_button = tk.Button(left_frame, text="Add", command=on_add_button_click)
-add_button.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
-
-add_from_file_label = tk.Label(left_frame, text="Add from File:")
-add_from_file_label.pack(anchor=tk.W)
-
-browse_button = tk.Button(left_frame, text="Browse", command=on_file_browse_button_click)
-browse_button.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
-
-file_format_text = tk.Label(left_frame, text="Supported File Formats:\nText File (.txt): One domain per line.\nCSV File (.csv): One domain per row.\nJSON File (.json): Array of domain strings.")
-file_format_text.pack(anchor=tk.W)
-
-search_label = tk.Label(right_frame, text="Search Domain:")
-search_label.pack(anchor=tk.W)
-search_entry = tk.Entry(right_frame, width=30)
-search_entry.pack(anchor=tk.W, padx=5, pady=5, fill=tk.X)
-search_entry.bind("<KeyRelease>", search_domains)
-
-existing_domains_label = tk.Label(right_frame, text="Existing Domains:")
-existing_domains_label.pack(anchor=tk.W)
-
-existing_domains_frame = tk.Frame(right_frame)
-existing_domains_frame.pack(expand=True, fill=tk.BOTH)
-
-existing_domains_listbox = tk.Listbox(existing_domains_frame, width=40, height=10, selectmode=tk.SINGLE)
-existing_domains_listbox.pack(side=tk.LEFT, padx=5, fill=tk.BOTH, expand=True)
-
-scrollbar = tk.Scrollbar(existing_domains_frame, orient=tk.VERTICAL)
-scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-existing_domains_listbox.config(yscrollcommand=scrollbar.set)
-scrollbar.config(command=existing_domains_listbox.yview)
-
-# Create a frame for the remove and refresh buttons
-button_frame = tk.Frame(right_frame)
-button_frame.pack(anchor=tk.CENTER, padx=5, pady=5)
-
-remove_button = tk.Button(button_frame, text="Remove", command=on_remove_button_click, width=10)
-remove_button.pack(side=tk.LEFT, padx=5)
-
-refresh_button = tk.Button(button_frame, text="Refresh", command=on_refresh_button_click, width=10)
-refresh_button.pack(side=tk.LEFT, padx=5)
-
-feedback_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=50, height=10)
-feedback_text.pack(side=tk.BOTTOM, padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-# Display Brave installation status
-display_brave_status()
-
-# Display registry path check result
-display_registry_path()
-
-# Refresh existing domains
-refresh_existing_domains()
-
-# Set default window size as a percentage of screen size
-set_default_window_size(root, 46, 46)
-
-root.mainloop()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    # Apply the complete dark theme to your Qt App.
+    qdarktheme.setup_theme()
+    gui = DomainManagerGUI()
+    gui.show()
+    sys.exit(app.exec_())
