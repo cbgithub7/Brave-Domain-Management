@@ -1,10 +1,10 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
-    QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QAction, QSizePolicy, \
-    QDesktopWidget, QToolBar, QAbstractItemView
+    QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QSizePolicy, \
+    QDesktopWidget, QToolBar, QAbstractItemView, QTabWidget, QTextBrowser
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize, QEventLoop
-from qtwidgets import AnimatedToggle  # Import AnimatedToggle from qtwidgets
+from qtwidgets import AnimatedToggle
 import domain_manager_functions as dm_functions
 import qdarktheme
 
@@ -14,39 +14,16 @@ class DomainManagerGUI(QMainWindow):
         self.setWindowTitle("Brave Domain Manager")
         self.setWindowIcon(QIcon("icon/Brave_domain_blocker.ico"))
 
-        self.central_widget = QWidget()
+        self.central_widget = QTabWidget()
         self.setCentralWidget(self.central_widget)
 
-        self.main_layout = QVBoxLayout(self.central_widget)
-
-        # Create toolbar
-        self.toolbar = QToolBar()
-        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # Display text beside icon
-        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
-
-        # Toolbar actions
-        self.undo_action = QAction(QIcon("icon/undo_icon.png"), "Undo", self)
-        self.undo_action.triggered.connect(dm_functions.undo_action)
-        self.toolbar.addAction(self.undo_action)
-
-        self.redo_action = QAction(QIcon("icon/redo_icon.png"), "Redo", self)
-        self.redo_action.triggered.connect(dm_functions.redo_action)
-        self.toolbar.addAction(self.redo_action)
-
-        # Add AnimatedToggle widget for theme switching
-        self.theme_toggle_switch = AnimatedToggle(
-            checked_color="#FFB000",
-            pulse_checked_color="#44FFB000"
-        )
-        
-        # Add spacer to push the toggle switch to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.toolbar.addWidget(spacer)
-
-        # Add the toggle switch to the toolbar
-        self.toolbar.addWidget(self.theme_toggle_switch)
-        self.theme_toggle_switch.toggled.connect(self.toggle_theme)
+        # Create and add tabs
+        self.tab1 = QWidget()
+        self.tab2 = QWidget()
+        self.tab3 = QWidget()
+        self.central_widget.addTab(self.tab1, "Single Domain")
+        self.central_widget.addTab(self.tab2, "Batch Domain")
+        self.central_widget.addTab(self.tab3, "Log Viewer")
 
         # Set initial state based on saved preference or default
         self.dark_theme_enabled = False  # Set default to dark theme
@@ -57,6 +34,59 @@ class DomainManagerGUI(QMainWindow):
         window_width = int(screen.width() * 0.46)
         window_height = int(screen.height() * 0.46)
         self.resize(QSize(window_width, window_height))
+
+        self.setup_tab1(window_width)
+        self.setup_tab2(window_width)
+        self.setup_tab3()
+
+        qdarktheme.setup_theme(custom_colors={"tab.activeBackground": "#E81275"})
+
+        # Apply the theme after all necessary widgets are initialized
+        self.apply_theme()
+
+        self.display_brave_status()
+        self.display_registry_path()
+        self.refresh_existing_domains()
+
+    def setup_tab1(self, window_width):
+        layout = QVBoxLayout()
+        self.tab1.setLayout(layout)
+
+        # Create toolbar
+        self.toolbar = QToolBar()
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # Display text beside icon
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+
+        # Add AnimatedToggle widget for theme switching
+        self.theme_toggle_switch = AnimatedToggle(
+            checked_color="#FFB000",
+            pulse_checked_color="#44FFB000"
+        )
+
+        # Set the size policy of the toggle switch
+        self.theme_toggle_switch.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Define the size in density-independent pixels for both width and height
+        toggle_width_dp = 45
+        toggle_height_dp = 32
+
+        # Calculate the size in pixels based on the current screen's pixel density for width
+        toggle_width_px = int(toggle_width_dp * self.logicalDpiX() / 96)
+
+        # Calculate the size in pixels based on the current screen's pixel density for height
+        toggle_height_px = int(toggle_height_dp * self.logicalDpiY() / 96)
+
+        # Set the fixed size of the toggle switch
+        self.theme_toggle_switch.setFixedSize(toggle_width_px, toggle_height_px)
+        
+        # Add spacer to push the toggle switch to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.toolbar.addWidget(spacer)
+
+        # Add the toggle switch to the toolbar
+        self.toolbar.addWidget(self.theme_toggle_switch)
+        self.theme_toggle_switch.toggled.connect(self.toggle_theme)
 
         # Upper Frame
         self.upper_frame = QWidget()
@@ -111,13 +141,40 @@ class DomainManagerGUI(QMainWindow):
         self.search_entry.textChanged.connect(self.search_domains)  # Dynamic search
         self.right_layout.addWidget(self.search_entry)
 
-        self.existing_domains_label = QLabel("Blocked Domains:")
-        self.right_layout.addWidget(self.existing_domains_label)
+        # File domains list
+        self.file_domains_label = QLabel("Domains from File:")
+        self.file_domains_list = QListWidget()
+        self.file_domains_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
+        # Existing domains list
+        self.existing_domains_label = QLabel("Blocked Domains:")
         self.existing_domains_list = QListWidget()
         self.existing_domains_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.right_layout.addWidget(self.existing_domains_list)
 
+        # Create container widget for side by side layout
+        side_by_side_container = QWidget()
+
+        # Add file domains list and existing domains list side by side
+        side_by_side_layout = QHBoxLayout(side_by_side_container)
+
+        # Left layout for file domains list
+        left_side_layout = QVBoxLayout()
+        left_side_layout.addWidget(self.file_domains_label)
+        left_side_layout.addWidget(self.file_domains_list)
+
+        # Right layout for existing domains list
+        right_side_layout = QVBoxLayout()
+        right_side_layout.addWidget(self.existing_domains_label)
+        right_side_layout.addWidget(self.existing_domains_list)
+
+        # Add left and right layouts to the side by side layout
+        side_by_side_layout.addLayout(left_side_layout)
+        side_by_side_layout.addLayout(right_side_layout)
+
+        # Add container widget to the right layout
+        self.right_layout.addWidget(side_by_side_container)
+
+        # Add buttons frame
         self.button_frame = QWidget()
         self.button_layout = QHBoxLayout(self.button_frame)
 
@@ -133,23 +190,31 @@ class DomainManagerGUI(QMainWindow):
 
         self.upper_layout.addWidget(self.right_frame)
 
-        self.main_layout.addWidget(self.upper_frame)
+        layout.addWidget(self.upper_frame)
 
         # Feedback Text
         self.feedback_text = QTextEdit()
         self.feedback_text.setReadOnly(True)
-        self.main_layout.addWidget(self.feedback_text)
+        layout.addWidget(self.feedback_text)
 
         # Feedback label for displaying the current domain being processed
         self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
-        self.main_layout.addWidget(self.current_domain_label)
+        layout.addWidget(self.current_domain_label)
 
-        # Apply the theme after all necessary widgets are initialized
-        self.apply_theme()
+    def setup_tab2(self, window_width):
+        layout = QVBoxLayout()
+        self.tab2.setLayout(layout)
 
-        self.display_brave_status()
-        self.display_registry_path()
-        self.refresh_existing_domains()
+        # Add your existing layout components for Tab 2 here
+
+    def setup_tab3(self):
+        layout = QVBoxLayout()
+        self.tab3.setLayout(layout)
+
+        # Add placeholder file viewer
+        placeholder_viewer = QTextBrowser()
+        placeholder_viewer.setPlainText("Placeholder File Viewer")
+        layout.addWidget(placeholder_viewer)
 
     def toggle_theme(self, state):
         self.dark_theme_enabled = state  # state is True for dark theme, False for light theme
@@ -355,7 +420,6 @@ class DomainManagerGUI(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Apply the complete dark theme to your Qt App.
     qdarktheme.setup_theme()
     gui = DomainManagerGUI()
     gui.show()
