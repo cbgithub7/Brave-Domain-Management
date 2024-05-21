@@ -92,7 +92,7 @@ def process_json_file(file_path, update_feedback):
                 yield file_name, result, domain  # Adjust the order of values being yielded
     except Exception as e:
         update_feedback(f"Error processing JSON file: {e}")
-    
+
 def undo_action():
     # Call PowerShell script to perform undo action
     try:

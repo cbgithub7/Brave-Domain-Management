@@ -1,92 +1,62 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
     QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QSizePolicy, \
-    QDesktopWidget, QToolBar, QAbstractItemView, QTabWidget, QTextBrowser
+    QDesktopWidget, QAbstractItemView, QTabWidget, QTextBrowser
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize, QEventLoop
 from qtwidgets import AnimatedToggle
-import domain_manager_functions as dm_functions
 import qdarktheme
+import domain_manager_functions as dm_functions
 
 class DomainManagerGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Brave Domain Manager")
         self.setWindowIcon(QIcon("icon/Brave_domain_blocker.ico"))
-
-        self.central_widget = QTabWidget()
+        
+        self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
+        self.main_layout = QVBoxLayout(self.central_widget)
+
+        # Calculate window size based on screen size
+        screen = QDesktopWidget().screenGeometry()
+        window_width = int(screen.width() * 0.60)
+        window_height = int(screen.height() * 0.60)
+        self.resize(QSize(window_width, window_height))
+
+        # Create a tab widget
+        self.tab_widget = QTabWidget()
+        self.main_layout.addWidget(self.tab_widget)
+
         # Create and add tabs
-        self.tab1 = QWidget()
-        self.tab2 = QWidget()
-        self.tab3 = QWidget()
-        self.central_widget.addTab(self.tab1, "Single Domain")
-        self.central_widget.addTab(self.tab2, "Batch Domain")
-        self.central_widget.addTab(self.tab3, "Log Viewer")
+        self.domain_tab = QWidget()
+        self.log_tab = QWidget()
+        self.tab_widget.addTab(self.domain_tab, "Domain Management")
+        self.tab_widget.addTab(self.log_tab, "Log Viewer")
+
+        # Add the lower frame
+        self.add_lower_frame()
+
+        # Setup tabs
+        self.setup_domain_tab(window_width)
+        self.setup_log_tab()
 
         # Set initial state based on saved preference or default
         self.dark_theme_enabled = False  # Set default to dark theme
         self.load_theme_preference()
 
-        # Calculate window size based on screen size
-        screen = QDesktopWidget().screenGeometry()
-        window_width = int(screen.width() * 0.46)
-        window_height = int(screen.height() * 0.46)
-        self.resize(QSize(window_width, window_height))
-
-        self.setup_tab1(window_width)
-        self.setup_tab2(window_width)
-        self.setup_tab3()
-
-        qdarktheme.setup_theme(custom_colors={"tab.activeBackground": "#E81275"})
-
         # Apply the theme after all necessary widgets are initialized
         self.apply_theme()
 
+        # Populate GUI with initial data
         self.display_brave_status()
         self.display_registry_path()
         self.refresh_existing_domains()
 
-    def setup_tab1(self, window_width):
+    def setup_domain_tab(self, window_width):
         layout = QVBoxLayout()
-        self.tab1.setLayout(layout)
-
-        # Create toolbar
-        self.toolbar = QToolBar()
-        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # Display text beside icon
-        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
-
-        # Add AnimatedToggle widget for theme switching
-        self.theme_toggle_switch = AnimatedToggle(
-            checked_color="#FFB000",
-            pulse_checked_color="#44FFB000"
-        )
-
-        # Set the size policy of the toggle switch
-        self.theme_toggle_switch.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-        # Define the size in density-independent pixels for both width and height
-        toggle_width_dp = 45
-        toggle_height_dp = 32
-
-        # Calculate the size in pixels based on the current screen's pixel density for width
-        toggle_width_px = int(toggle_width_dp * self.logicalDpiX() / 96)
-
-        # Calculate the size in pixels based on the current screen's pixel density for height
-        toggle_height_px = int(toggle_height_dp * self.logicalDpiY() / 96)
-
-        # Set the fixed size of the toggle switch
-        self.theme_toggle_switch.setFixedSize(toggle_width_px, toggle_height_px)
-        
-        # Add spacer to push the toggle switch to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.toolbar.addWidget(spacer)
-
-        # Add the toggle switch to the toolbar
-        self.toolbar.addWidget(self.theme_toggle_switch)
-        self.theme_toggle_switch.toggled.connect(self.toggle_theme)
+        self.domain_tab.setLayout(layout)
 
         # Upper Frame
         self.upper_frame = QWidget()
@@ -97,10 +67,10 @@ class DomainManagerGUI(QMainWindow):
         self.left_layout = QVBoxLayout(self.left_frame)
         self.left_layout.setAlignment(Qt.AlignTop)  # Align at the top
         self.left_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.left_frame.setMinimumWidth(int(window_width * 1/3))
-        self.left_frame.setMaximumWidth(int(window_width * 1/3))
+        self.left_frame.setMinimumWidth(int(window_width * 1/4))
+        self.left_frame.setMaximumWidth(int(window_width * 1/4))
 
-        self.add_label = QLabel("Add Domain: (Click Add or press Enter)")
+        self.add_label = QLabel("Add Domain: (Click Submit or press Enter)")
         self.left_layout.addWidget(self.add_label)
 
         self.add_entry = QLineEdit()
@@ -108,7 +78,7 @@ class DomainManagerGUI(QMainWindow):
         self.add_entry.returnPressed.connect(self.on_add_button_click)
         self.left_layout.addWidget(self.add_entry)
 
-        self.add_button = QPushButton("Add")
+        self.add_button = QPushButton("Submit")
         self.add_button.clicked.connect(self.on_add_button_click)
         self.left_layout.addWidget(self.add_button)
 
@@ -131,8 +101,8 @@ class DomainManagerGUI(QMainWindow):
         self.right_layout = QVBoxLayout(self.right_frame)
         self.right_layout.setAlignment(Qt.AlignTop)  # Align at the top
         self.right_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.right_frame.setMinimumWidth(int(window_width * 2/3))
-        self.right_frame.setMaximumWidth(int(window_width * 2/3))
+        self.right_frame.setMinimumWidth(int(window_width * 3/4))
+        self.right_frame.setMaximumWidth(int(window_width * 3/4))
 
         self.search_label = QLabel("Search Domains:")
         self.right_layout.addWidget(self.search_label)
@@ -151,21 +121,61 @@ class DomainManagerGUI(QMainWindow):
         self.existing_domains_list = QListWidget()
         self.existing_domains_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
+        # Create buttons
+        self.add_button = QPushButton("Add")
+        self.remove_button = QPushButton("Remove")
+        self.clear_button = QPushButton("Clear")
+        self.refresh_button = QPushButton("Refresh")
+
+        # Connect buttons to functions
+        self.add_button.clicked.connect(self.on_remove_button_click)
+        self.remove_button.clicked.connect(self.on_remove_button_click)
+        self.clear_button.clicked.connect(self.on_remove_button_click)
+        self.refresh_button.clicked.connect(self.on_refresh_button_click)
+
+        # List of buttons
+        buttons = [self.add_button, self.remove_button, self.clear_button, self.refresh_button]
+
+        # Calculate the standard width
+        max_width = max(button.fontMetrics().boundingRect(button.text()).width() for button in buttons)
+        standard_width = max_width + 60  # Add padding (e.g., 20 pixels)
+
+        # Set the standard width for each button
+        for button in buttons:
+            button.setFixedWidth(standard_width)
+        
+        # Add button frames
+        self.left_button_frame = QWidget()
+        self.left_button_layout = QHBoxLayout(self.left_button_frame)
+
+        self.right_button_frame = QWidget()
+        self.right_button_layout = QHBoxLayout(self.right_button_frame)
+
+        # Add buttons to layout
+        self.left_button_layout.addWidget(self.add_button)
+        self.left_button_layout.addWidget(self.remove_button)
+        self.left_button_layout.addWidget(self.clear_button)
+
+        self.right_button_layout.addWidget(self.refresh_button)
+
         # Create container widget for side by side layout
         side_by_side_container = QWidget()
 
         # Add file domains list and existing domains list side by side
         side_by_side_layout = QHBoxLayout(side_by_side_container)
+        side_by_side_layout.setContentsMargins(0, 0, 0, 0)
 
         # Left layout for file domains list
         left_side_layout = QVBoxLayout()
         left_side_layout.addWidget(self.file_domains_label)
         left_side_layout.addWidget(self.file_domains_list)
+        left_side_layout.addWidget(self.left_button_frame)
 
         # Right layout for existing domains list
         right_side_layout = QVBoxLayout()
         right_side_layout.addWidget(self.existing_domains_label)
         right_side_layout.addWidget(self.existing_domains_list)
+        right_side_layout.addWidget(self.right_button_frame)
 
         # Add left and right layouts to the side by side layout
         side_by_side_layout.addLayout(left_side_layout)
@@ -173,20 +183,6 @@ class DomainManagerGUI(QMainWindow):
 
         # Add container widget to the right layout
         self.right_layout.addWidget(side_by_side_container)
-
-        # Add buttons frame
-        self.button_frame = QWidget()
-        self.button_layout = QHBoxLayout(self.button_frame)
-
-        self.remove_button = QPushButton("Remove")
-        self.remove_button.clicked.connect(self.on_remove_button_click)
-        self.button_layout.addWidget(self.remove_button)
-
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.on_refresh_button_click)
-        self.button_layout.addWidget(self.refresh_button)
-
-        self.right_layout.addWidget(self.button_frame)
 
         self.upper_layout.addWidget(self.right_frame)
 
@@ -197,24 +193,62 @@ class DomainManagerGUI(QMainWindow):
         self.feedback_text.setReadOnly(True)
         layout.addWidget(self.feedback_text)
 
-        # Feedback label for displaying the current domain being processed
-        self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
-        layout.addWidget(self.current_domain_label)
-
-    def setup_tab2(self, window_width):
+    def setup_log_tab(self):
         layout = QVBoxLayout()
-        self.tab2.setLayout(layout)
-
-        # Add your existing layout components for Tab 2 here
-
-    def setup_tab3(self):
-        layout = QVBoxLayout()
-        self.tab3.setLayout(layout)
+        self.log_tab.setLayout(layout)
 
         # Add placeholder file viewer
         placeholder_viewer = QTextBrowser()
         placeholder_viewer.setPlainText("Placeholder File Viewer")
         layout.addWidget(placeholder_viewer)
+
+    def add_lower_frame(self):
+        # Lower Frame
+        lower_frame = QWidget()
+        lower_layout = QHBoxLayout(lower_frame)
+        lower_layout.setContentsMargins(0, 0, 0, 0)
+        lower_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        # Set background color of the lower frame to transparent
+        lower_frame.setStyleSheet("background-color: transparent;")
+
+        # Feedback label for displaying the current domain being processed
+        self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
+        lower_layout.addWidget(self.current_domain_label)
+
+        # Add AnimatedToggle widget for theme switching
+        theme_toggle_switch = AnimatedToggle(
+            checked_color="#FFB000",
+            pulse_checked_color="#00000000",
+            pulse_unchecked_color="#00000000"
+        )
+
+        # Set the size policy of the toggle switch
+        theme_toggle_switch.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Define the size in density-independent pixels for both width and height
+        toggle_width_dp = 45
+        toggle_height_dp = 32
+
+        # Calculate the size in pixels based on the current screen's pixel density for width
+        toggle_width_px = int(toggle_width_dp * self.logicalDpiX() / 96)
+
+        # Calculate the size in pixels based on the current screen's pixel density for height
+        toggle_height_px = int(toggle_height_dp * self.logicalDpiY() / 96)
+
+        # Set the fixed size of the toggle switch
+        theme_toggle_switch.setFixedSize(toggle_width_px, toggle_height_px)
+
+        # Add spacer to push the toggle switch to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lower_layout.addWidget(spacer)
+
+        # Add the toggle switch to the layout
+        lower_layout.addWidget(theme_toggle_switch)
+        theme_toggle_switch.toggled.connect(self.toggle_theme)
+
+        self.main_layout.addWidget(lower_frame)
 
     def toggle_theme(self, state):
         self.dark_theme_enabled = state  # state is True for dark theme, False for light theme
@@ -230,7 +264,7 @@ class DomainManagerGUI(QMainWindow):
             qdarktheme.setup_theme("light")
             placeholder_color = "#666666"
             text_color = "black"  # Black color for light theme
-            
+
         # Set placeholder text color for add_entry QLineEdit
         self.add_entry.setStyleSheet("QLineEdit { color: %s; }"
                                     "QLineEdit::placeholder { color: %s; }"
@@ -307,7 +341,7 @@ class DomainManagerGUI(QMainWindow):
             self.process_file(file_path)
 
     def process_file(self, file_path):
-        try:    
+        try:
             # Function to process the selected file
             if file_path.endswith('.txt'):
                 processing_function = dm_functions.process_text_file
@@ -341,17 +375,17 @@ class DomainManagerGUI(QMainWindow):
                     for item in items:
                         item.setSelected(True)
                         self.existing_domains_list.scrollToItem(item)
-            
+
             # Display final success message with the file name
             self.update_current_domain("", action_type="Adding", final_message=True, file_name=file_name)
-            
+
         except Exception as e:
             self.update_feedback(f"Error processing file: {e}")
 
     def update_current_domain(self, domain, action_type, final_message=False, single_domain=False, file_name=None):
         if len(domain) > 100:  # Adjust this threshold as needed
             domain = domain[:97] + "..."  # Truncate long domain names
-        
+
         if action_type == "Adding":
             if file_name:
                 message = f"Adding {domain} from {file_name} to the block list."
@@ -361,9 +395,9 @@ class DomainManagerGUI(QMainWindow):
             message = f"Removing {domain} from the block list."
         else:
             message = f"{action_type} {domain}"
-        
+
         self.current_domain_label.setText(message)
-        
+
         if final_message:
             if action_type == "Adding":
                 if single_domain:
@@ -377,7 +411,7 @@ class DomainManagerGUI(QMainWindow):
                     success_message = "All selected domains have been successfully removed from the block list."
             else:
                 success_message = "Operation completed successfully."
-            
+
             self.current_domain_label.setText(success_message)
 
     def update_feedback(self, message):
@@ -415,8 +449,8 @@ class DomainManagerGUI(QMainWindow):
         else:
             self.update_feedback(existing_domains)
 
-    def update_feedback(self, message):
-        self.feedback_text.append(message)
+    '''def update_feedback(self, message):
+        self.feedback_text.append(message)'''
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
