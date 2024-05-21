@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHB
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize, QEventLoop
 from qtwidgets import AnimatedToggle
+from fuzzywuzzy import fuzz
 import qdarktheme
 import domain_manager_functions as dm_functions
 
@@ -444,8 +445,10 @@ class DomainManagerGUI(QMainWindow):
         existing_domains = dm_functions.fetch_existing_domains()
         self.existing_domains_list.clear()
         if isinstance(existing_domains, list):
-            matching_domains = [domain for domain in existing_domains if search_text.lower() in domain.lower()]
-            self.existing_domains_list.addItems(matching_domains)
+            for domain in existing_domains:
+                similarity_score = fuzz.partial_ratio(search_text.lower(), domain.lower())
+                if similarity_score >= 70:  # Adjust threshold as needed
+                    self.existing_domains_list.addItem(domain)
         else:
             self.update_feedback(existing_domains)
 

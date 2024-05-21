@@ -400,3 +400,5 @@ FodyWeavers.xsd
 #My Ideas
 New_features.txt
 test.py
+fuzz.py
+trie_search.py
