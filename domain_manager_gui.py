@@ -1,9 +1,10 @@
-import sys
+import sys, os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
     QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog, QSizePolicy, \
-    QDesktopWidget, QAbstractItemView, QTabWidget, QTextBrowser
+    QDesktopWidget, QAbstractItemView, QTabWidget, QTextBrowser, QMessageBox
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QSize, QEventLoop, QEvent
+from PyQt5.QtCore import Qt, QSize, QEventLoop, QEvent, QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 from qtwidgets import AnimatedToggle
 from fuzzywuzzy import fuzz
 import qdarktheme
@@ -38,8 +39,10 @@ class DomainManagerGUI(QMainWindow):
         # Create and add tabs
         self.domain_tab = QWidget()
         self.log_tab = QWidget()
+        self.doc_tab = QWidget()
         self.tab_widget.addTab(self.domain_tab, "Domain Management")
         self.tab_widget.addTab(self.log_tab, "Log Viewer")
+        self.tab_widget.addTab(self.doc_tab, "Documentation")
 
         # Add the lower frame
         self.add_lower_frame()
@@ -47,6 +50,7 @@ class DomainManagerGUI(QMainWindow):
         # Setup tabs
         self.setup_main_tab(window_width)
         self.setup_log_tab()
+        self.setup_doc_tab()
 
         # Set initial state based on saved preference or default
         self.dark_theme_enabled = False  # Set default to dark theme
@@ -91,9 +95,19 @@ class DomainManagerGUI(QMainWindow):
         self.add_from_file_label = QLabel("Add from File:")
         self.left_layout.addWidget(self.add_from_file_label)
 
+        # Add a filepath input widget
+        self.filepath_entry = QLineEdit()
+        self.filepath_entry.setPlaceholderText("Enter file path or browse to select")
+        self.left_layout.addWidget(self.filepath_entry)
+
+        # Modify the existing browse button and add the new open button
         self.browse_button = QPushButton("Browse")
         self.browse_button.clicked.connect(self.on_file_browse_button_click)
         self.left_layout.addWidget(self.browse_button)
+
+        self.open_button = QPushButton("Open")
+        self.open_button.clicked.connect(self.on_open_button_click)
+        self.left_layout.addWidget(self.open_button)
 
         self.file_format_text = QLabel(
             "Supported File Formats:\nText File (.txt): One domain per line.\nCSV File (.csv): One domain per row.\nJSON File (.json): Array of domain strings."
@@ -133,8 +147,8 @@ class DomainManagerGUI(QMainWindow):
         self.existing_domains_list.installEventFilter(self)  # Install event filter
 
         # Create buttons
-        self.add_button = self.create_button("Add to Registry", self.add_domains_from_list)
-        self.remove_button = self.create_button("Remove from Registry", self.remove_domains_from_list)
+        self.add_button = self.create_button("Add to Registry", lambda: self.process_domains_from_list("Add"))
+        self.remove_button = self.create_button("Remove from Registry", lambda: self.process_domains_from_list("Remove"))
         self.clear_button = self.create_button("Clear List", self.on_clear_button_click)
         self.delete_button = self.create_button("Delete Selected", self.on_delete_selected_button_click)
         self.refresh_button = self.create_button("Refresh List", self.on_refresh_button_click)
@@ -209,6 +223,22 @@ class DomainManagerGUI(QMainWindow):
         placeholder_viewer.setPlainText("Placeholder File Viewer")
         layout.addWidget(placeholder_viewer)
 
+    def setup_doc_tab(self):
+        layout = QVBoxLayout()
+        self.doc_tab.setLayout(layout)
+
+        # Create a QWebEngineView instance
+        self.webview = QWebEngineView()
+
+        # Convert the URL string to a QUrl object
+        url = QUrl("https://cbgithub7.github.io/Brave-Domain-Manager/")
+
+        # Load the specified URL
+        self.webview.load(url)
+
+        # Add the QWebEngineView to the layout
+        layout.addWidget(self.webview)
+
     def add_lower_frame(self):
         # Lower Frame
         lower_frame = QWidget()
@@ -272,8 +302,11 @@ class DomainManagerGUI(QMainWindow):
             placeholder_color = "#666666"
             text_color = "black"  # Black color for light theme
 
-        # Set placeholder text color for add_entry QLineEdit
+        # Set placeholder text color for input fields
         self.add_entry.setStyleSheet("QLineEdit { color: %s; }"
+                                    "QLineEdit::placeholder { color: %s; }"
+                                    "QLineEdit:focus { color: %s; }" % (text_color, placeholder_color, text_color))
+        self.filepath_entry.setStyleSheet("QLineEdit { color: %s; }"
                                     "QLineEdit::placeholder { color: %s; }"
                                     "QLineEdit:focus { color: %s; }" % (text_color, placeholder_color, text_color))
 
@@ -302,21 +335,24 @@ class DomainManagerGUI(QMainWindow):
     def on_submit_button_click(self):
         domain = self.add_entry.text()
         if domain:
-            result = dm_functions.add_domain(domain)
-            self.update_feedback(result)
-            self.refresh_existing_domains()
-            self.update_current_domain(domain, action_type="Adding", final_message=True, single_domain=True)
+            try:
+                cleaned_domain = dm_functions.clean_domain(domain)
+                result = dm_functions.add_domain(cleaned_domain)
+                self.update_feedback(result)
+                self.refresh_existing_domains()
+                self.update_current_domain(cleaned_domain, action_type="Add", final_message=True, single_domain=True)
 
-            # Highlight the newly added domain
-            cleaned_domain = dm_functions.clean_domain(domain)
-            items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
-            if items:
-                item = items[0]
-                item.setSelected(True)
-                self.existing_domains_list.scrollToItem(item, QAbstractItemView.PositionAtTop)
+                # Highlight the newly added domain
+                items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
+                if items:
+                    item = items[0]
+                    item.setSelected(True)
+                    self.existing_domains_list.scrollToItem(item, QAbstractItemView.PositionAtTop)
 
-            self.add_entry.clear()
-            self.add_entry.setFocus()
+                self.add_entry.clear()
+                self.add_entry.setFocus()
+            except ValueError as e:
+                self.update_feedback(f"Invalid domain format: {e}")
 
     def on_delete_selected_button_click(self):
         selected_items = self.existing_domains_list.selectedItems()
@@ -327,14 +363,14 @@ class DomainManagerGUI(QMainWindow):
                 domain = item.text()
                 result = dm_functions.remove_domain(domain)
                 self.update_feedback(result)
-                self.update_current_domain(domain, action_type="Removing", single_domain=single_domain)
+                self.update_current_domain(domain, action_type="Remove", single_domain=single_domain)
                 QEventLoop().processEvents()  # Process GUI events to update the display
 
             # After all domains are removed, refresh the existing domains list
             self.refresh_existing_domains()
 
             # Display the final success message
-            self.update_current_domain(domain, action_type="Removing", final_message=True, single_domain=single_domain)
+            self.update_current_domain(domain, action_type="Remove", final_message=True, single_domain=single_domain)
 
     def on_delete_key_press(self):
         if self.existing_domains_list.hasFocus():
@@ -349,6 +385,7 @@ class DomainManagerGUI(QMainWindow):
 
     def on_clear_button_click(self):
         self.file_domains_list.clear()
+        self.file_cached_domains.clear()
 
     def on_refresh_button_click(self):
         self.refresh_existing_domains()
@@ -362,111 +399,96 @@ class DomainManagerGUI(QMainWindow):
             "All Files (*);;Text Files (*.txt);;CSV Files (*.csv);;JSON Files (*.json)"
         )
         if file_path:
-            self.populate_file_domains_list(file_path)
+            self.filepath_entry.setText(file_path)  # Populate the filepath widget with the selected path
 
-    def populate_file_domains_list(self, file_path):
-        try:
-            if file_path.endswith('.txt'):
-                processing_function = dm_functions.process_text_file
-            elif file_path.endswith('.csv'):
-                processing_function = dm_functions.process_csv_file
-            elif file_path.endswith('.json'):
-                processing_function = dm_functions.process_json_file
-            else:
-                self.update_feedback("Unsupported file format. Please select a .txt, .csv, or .json file.")
-                return
+    def on_open_button_click(self):
+        file_path = self.filepath_entry.text()
+        if file_path:
+            file_name = os.path.basename(file_path)
+            self.populate_file_domains_list(file_path, file_name)
 
-            self.file_domains_list.clear()
-            self.file_cached_domains = []  # Clear the cache
+    def populate_file_domains_list(self, file_path, file_name):
+        if not file_path:
+            self.update_feedback("Please provide a file path.")
+            return
 
-            for _, _, domain in processing_function(file_path, self.update_feedback):
+        if file_path.endswith(".txt"):
+            processing_function = dm_functions.process_text_file
+        elif file_path.endswith(".csv"):
+            processing_function = dm_functions.process_csv_file
+        elif file_path.endswith(".json"):
+            processing_function = dm_functions.process_json_file
+        else:
+            self.update_feedback("Unsupported file format. Please use .txt, .csv, or .json.")
+            return
+
+        self.file_domains_list.clear()
+        self.file_cached_domains.clear()
+
+        domains = []
+        for _, domain in processing_function(file_path, self.update_feedback):  # Adjusted to only unpack domain
+            try:
                 cleaned_domain = dm_functions.clean_domain(domain)
-                self.file_domains_list.addItem(cleaned_domain)
-                self.file_cached_domains.append(cleaned_domain)  # Cache the domain
+                self.file_domains_list.addItem((cleaned_domain))
+                domains.append(cleaned_domain)
+            except ValueError as e:
+                self.update_feedback(f"Skipping invalid domain: {e}")
 
-            self.update_feedback(f"File {file_path} loaded successfully. Preview the domains and press 'Add' to add them to the block list.")
-
-        except Exception as e:
-            self.update_feedback(f"Error processing file: {e}")
-
-    def add_domains_from_list(self):
-        self.process_domains_from_list("Adding")
-
-    def remove_domains_from_list(self):
-        self.process_domains_from_list("Removing")
+        self.file_cached_domains.append((file_name, domains))
+        self.update_feedback(f"Loaded domains from {file_path}")
 
     def process_domains_from_list(self, action_type):
         selected_items = self.file_domains_list.selectedItems()
+        
+        if not self.file_cached_domains:
+            self.update_feedback(f"No domains to {action_type.lower()}.")
+            return
+        
+        file_name = self.file_cached_domains[0][0]
+
         if selected_items:
-            single_domain = len(selected_items) == 1
-            for item in selected_items:
-                domain = item.text()
-                cleaned_domain = dm_functions.clean_domain(domain)  # Clean the domain
-                if action_type == "Adding":
-                    result = dm_functions.add_domain(cleaned_domain)
-                else:  # Removing
-                    result = dm_functions.remove_domain(cleaned_domain)
+            domains = [item.text() for item in selected_items]
+            message = f"Do you want to {action_type.lower()} the selected domains?"
+        else:
+            if not self.file_cached_domains:
+                self.update_feedback(f"No domains to {action_type.lower()}.")
+                return
+            
+            domains = self.file_cached_domains[0][1]
+            message = f"Do you want to {action_type.lower()} all domains from {file_name}?"
+
+        reply = QMessageBox.question(self, 'Confirmation', message,
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            for domain in domains:
+                if action_type == "Add":
+                    result = dm_functions.add_domain(domain)
+                elif action_type == "Remove":
+                    result = dm_functions.remove_domain(domain)
+                else:
+                    self.update_feedback(f"Unsupported action type: {action_type}")
+                    return
+
                 self.update_feedback(result)
-                self.update_current_domain(cleaned_domain, action_type=action_type, single_domain=single_domain)
+                self.update_current_domain(domain, action_type=action_type, file_name=file_name)
                 QEventLoop().processEvents()  # Process GUI events to update the display
 
             self.refresh_existing_domains()
 
             # Display the final success message
-            self.update_current_domain("", action_type=action_type, final_message=True, single_domain=single_domain)
-
-    def process_file(self, file_path):
-        try:
-            # Function to process the selected file
-            if file_path.endswith('.txt'):
-                processing_function = dm_functions.process_text_file
-            elif file_path.endswith('.csv'):
-                processing_function = dm_functions.process_csv_file
-            elif file_path.endswith('.json'):
-                processing_function = dm_functions.process_json_file
-            else:
-                self.update_feedback("Unsupported file format. Please select a .txt, .csv, or .json file.")
-                return
-
-            # Create a QEventLoop to process events
-            loop = QEventLoop()
-            new_domains = []
-
-            for file_name, result, domain in processing_function(file_path, self.update_feedback):
-                self.update_feedback(result)
-                self.update_current_domain(domain, action_type="Adding", final_message=False)
-                # Process events to update the GUI
-                loop.processEvents(QEventLoop.AllEvents | QEventLoop.WaitForMoreEvents)
-
-                new_domains.append(domain)
-
-            self.refresh_existing_domains()
-
-            # Update existing domains list with newly added domains highlighted
-            for domain in new_domains:
-                cleaned_domain = dm_functions.clean_domain(domain)  # Clean the domain
-                items = self.existing_domains_list.findItems(cleaned_domain, Qt.MatchExactly)
-                if items:
-                    for item in items:
-                        item.setSelected(True)
-                        self.existing_domains_list.scrollToItem(item)
-
-            # Display final success message with the file name
-            self.update_current_domain("", action_type="Adding", final_message=True, file_name=file_name)
-
-        except Exception as e:
-            self.update_feedback(f"Error processing file: {e}")
+            self.update_current_domain("", action_type=action_type, final_message=True, file_name=file_name)
 
     def update_current_domain(self, domain, action_type, final_message=False, single_domain=False, file_name=None):
         if len(domain) > 100:  # Adjust this threshold as needed
             domain = domain[:97] + "..."  # Truncate long domain names
 
-        if action_type == "Adding":
+        if action_type == "Add":
             if file_name:
                 message = f"Adding {domain} from {file_name} to the block list."
             else:
                 message = f"Adding {domain} to the block list."
-        elif action_type == "Removing":
+        elif action_type == "Remove":
             if file_name:
                 message = f"Removing {domain} from {file_name} from the block list."
             else:
@@ -477,12 +499,12 @@ class DomainManagerGUI(QMainWindow):
         self.current_domain_label.setText(message)
 
         if final_message:
-            if action_type == "Adding":
+            if action_type == "Add":
                 if single_domain:
                     success_message = f"The domain {domain} has been successfully added to the block list."
                 else:
                     success_message = f"All domains from {file_name} have been successfully added to the block list."
-            elif action_type == "Removing":
+            elif action_type == "Remove":
                 if single_domain:
                     success_message = f"The domain {domain} has been successfully removed from the block list."
                 else:
@@ -539,7 +561,7 @@ class DomainManagerGUI(QMainWindow):
             cached_domains = self.cached_domains
         elif list_type == 'file':
             domain_list_widget = self.file_domains_list
-            cached_domains = self.file_cached_domains
+            cached_domains = [domain for _, domain_list in self.file_cached_domains for domain in domain_list]
         else:
             return
 
@@ -548,13 +570,13 @@ class DomainManagerGUI(QMainWindow):
 
     def search_domains(self):
         search_text = self.search_entry.text()
-        
+
         if self.current_list == 'existing':
             domain_list_widget = self.existing_domains_list
             cached_domains = self.cached_domains
         elif self.current_list == 'file':
             domain_list_widget = self.file_domains_list
-            cached_domains = self.file_cached_domains
+            cached_domains = [domain for _, domain_list in self.file_cached_domains for domain in domain_list]
         else:
             return
 

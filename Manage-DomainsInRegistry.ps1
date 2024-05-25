@@ -226,7 +226,7 @@ function Remove-DomainFromRegistry {
                 Remove-ItemProperty -Path $path -Name $domainToRemove.Name -ErrorAction Stop
                 return "Domain '$($domainToRemove.Value)' removed successfully from the registry."
             } else {
-                return "No domain found at index '$indexToRemove'."
+                return "Domain '$indexToRemove' not found in registry for removal."
             }
         } catch {
             return "Failed to remove domain at index '$indexToRemove' from the registry: $_"

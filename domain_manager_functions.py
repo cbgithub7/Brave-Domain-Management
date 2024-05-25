@@ -43,14 +43,13 @@ def clean_domain(domain):
     cleaned_domain = re.sub(r'/.+', '', cleaned_domain)  # Remove path info
 
     if not re.match(domain_pattern, cleaned_domain):
-        raise ValueError(f"Invalid domain format: {domain}. Please use [subdomain].[domain].[TLD] format.")
+        raise ValueError(f"{domain}. Please use [subdomain].[domain].[TLD] format.")
 
     return cleaned_domain
 
 def add_domain(domain):
     try:
-        cleaned_domain = clean_domain(domain)
-        result = execute_powershell_script("2", cleaned_domain)
+        result = execute_powershell_script("2", domain)
         return result.strip()
     except ValueError as e:
         return str(e)
@@ -65,8 +64,7 @@ def process_text_file(file_path, update_feedback):
         with open(file_path, "r") as file:
             for line in file:
                 domain = line.strip()
-                result = add_domain(domain)
-                yield file_name, result, domain  # Adjust the order of values being yielded
+                yield file_name, domain
     except Exception as e:
         update_feedback(f"Error processing text file: {e}")
 
@@ -77,8 +75,7 @@ def process_csv_file(file_path, update_feedback):
             reader = csv.reader(file)
             for row in reader:
                 domain = row[0].strip()  # Assuming the domain is in the first column
-                result = add_domain(domain)
-                yield file_name, result, domain  # Adjust the order of values being yielded
+                yield file_name, domain
     except Exception as e:
         update_feedback(f"Error processing CSV file: {e}")
 
@@ -88,8 +85,7 @@ def process_json_file(file_path, update_feedback):
         with open(file_path, "r") as file:
             data = json.load(file)
             for domain in data:
-                result = add_domain(domain)
-                yield file_name, result, domain  # Adjust the order of values being yielded
+                yield file_name, domain
     except Exception as e:
         update_feedback(f"Error processing JSON file: {e}")
 
