@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="D:\GitHub_Repositories\Scripts\Python\Conversion-Test\venv"
+VIRTUAL_ENV="D:\GitHub_Repositories\Scripts\Python\Brave-Domain-Manager\venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
