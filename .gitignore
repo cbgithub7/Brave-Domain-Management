@@ -399,6 +399,7 @@ FodyWeavers.xsd
 
 #My Ideas
 New_features.txt
-test_code/
+prototype_code/
 known_bugs.txt
 venv_install_steps.txt
+config.ini
