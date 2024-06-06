@@ -1,9 +1,13 @@
+# domain_manager_functions.py
+
+# Standard library imports
 import subprocess
 import json
 import re
 import csv
 import os
 import logging
+import configparser
 
 # Initialize logging
 logging.basicConfig(filename='domain_manager.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -85,6 +89,51 @@ def process_csv_file(file_path):
 
 def process_json_file(file_path):
     return process_file(file_path, lambda f: json.load(f))
+
+def get_processing_function(file_path):
+    if file_path.endswith(".txt"):
+        return process_text_file
+    elif file_path.endswith(".csv"):
+        return process_csv_file
+    elif file_path.endswith(".json"):
+        return process_json_file
+    return None
+
+def create_default_config(config_file):
+    config = configparser.ConfigParser()
+    config['Theme'] = {
+        'theme': 'False',
+        'show_prompt': 'True'
+    }
+    config['Logging'] = {
+        'logging': 'False',
+        'show_prompt': 'True',
+        'restart_for_logging': 'False'
+    }
+    with open(config_file, 'w') as configfile:
+        config.write(configfile)
+
+def save_preference(config_file, section, key, value):
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    if not config.has_section(section):
+        config.add_section(section)
+    config[section][key] = str(value)
+    with open(config_file, 'w') as configfile:
+        config.write(configfile)
+
+def load_preferences(config_file, sections):
+    config = configparser.ConfigParser()
+    if not os.path.exists(config_file):
+        create_default_config(config_file)
+    config.read(config_file)
+
+    preferences = {}
+    for section, keys in sections.items():
+        if not config.has_section(section):
+            config.add_section(section)
+        preferences[section] = {key: config.get(section, key, fallback=default) for key, default in keys.items()}
+    return preferences
 
 def undo_action():
     # Call PowerShell script to perform undo action
