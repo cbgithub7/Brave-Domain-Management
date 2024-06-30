@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QDesktopWidget, QAbstractItemView, QTabWidget,
     QMessageBox, QCheckBox, QDialog
 )
-from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize, QEventLoop, QEvent, QUrl, QTimer, QProcess
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
@@ -22,13 +21,15 @@ from qtwidgets import AnimatedToggle
 from fuzzywuzzy import fuzz
 
 # Local imports
-import qdarktheme
-import domain_manager_functions as dm_functions
+from theme_manager import theme_manager
+from custom_title_bar import CustomTitleBar
 from custom_prompt import CustomPrompt
+import domain_manager_functions as dm_functions
+from settings_tab import SettingsTab
 
 # Constants
+APP_NAME = "Brave Domain Manager"
 APP_ICON_PATH = "icons/Brave_domain_blocker.ico"
-ICON_PATH = "icons/question-circle.svg"
 DOC_URL = "https://cbgithub7.github.io/Brave-Domain-Manager/"
 CONFIG_FILE = 'config.ini'
 FILE_FORMATS = [
@@ -56,7 +57,7 @@ class DomainManagerGUI(QMainWindow):
             'Logging': True,
             'Theme': True
         }
-        self.theme = False
+        self.settings_tab = None
         self.is_initializing = True
 
         self.add_entry = QLineEdit()
@@ -78,7 +79,7 @@ class DomainManagerGUI(QMainWindow):
         self.setup_window()
         self.setup_layout()
         self.load_preferences()
-        self.apply_theme()
+        theme_manager.apply_theme(self, "main", title_bar=self.title_bar)
         self.display_brave_status()
         self.display_registry_path()
         self.refresh_existing_domains()
@@ -90,23 +91,31 @@ class DomainManagerGUI(QMainWindow):
             self.prompt_for_logging()
 
     def setup_window(self):
-        self.setWindowTitle("Brave Domain Manager")
-        self.setWindowIcon(QIcon(APP_ICON_PATH))
+        self.setWindowFlags(Qt.FramelessWindowHint)
 
         screen = QDesktopWidget().screenGeometry()
         window_width, window_height = int(screen.width() * 0.62), int(screen.height() * 0.60)
         self.resize(QSize(window_width, window_height))
 
     def setup_layout(self):
+        self.title_bar = CustomTitleBar(self, app_icon_path=APP_ICON_PATH, title=APP_NAME)
+
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
+
+        self.main_layout.addWidget(self.title_bar)
+        self.resizeEvent = self.update_title_bar_geometry
 
         self.tab_widget = QTabWidget()
         self.main_layout.addWidget(self.tab_widget)
 
         self.setup_tabs()
         self.add_lower_frame()
+
+    def update_title_bar_geometry(self, event):
+        self.title_bar.update_geometry()
+        super().resizeEvent(event)
 
     def setup_tabs(self):
         self.setup_main_tab()
@@ -123,7 +132,6 @@ class DomainManagerGUI(QMainWindow):
         self.left_frame = self.create_left_frame()
         self.right_frame = self.create_right_frame()
 
-        # Set the width ratios for the left and right frames
         self.left_frame.setMaximumWidth(int(self.width() * 0.25))
         self.right_frame.setMaximumWidth(int(self.width() * 0.75))
 
@@ -194,7 +202,6 @@ class DomainManagerGUI(QMainWindow):
     def add_domain_lists(self, layout):
         lists_layout = QHBoxLayout()  # Create a horizontal layout for the lists
 
-        # File domains list and its buttons
         file_domains_layout = QVBoxLayout()
         self.file_domains_list = self.create_domain_list("Domains from File:", 'file')
         file_domains_layout.addWidget(self.file_domains_list)
@@ -207,7 +214,6 @@ class DomainManagerGUI(QMainWindow):
         
         lists_layout.addLayout(file_domains_layout)
 
-        # Existing domains list and its buttons
         existing_domains_layout = QVBoxLayout()
         self.existing_domains_list = self.create_domain_list("Blocked Domains:", 'existing')
         existing_domains_layout.addWidget(self.existing_domains_list)
@@ -245,63 +251,14 @@ class DomainManagerGUI(QMainWindow):
         domain_list_widget.addItems(cached_domains)
 
     def setup_settings_tab(self):
-        self.log_tab = QWidget()
-        layout = QVBoxLayout(self.log_tab)
+        self.settings_tab = SettingsTab(CONFIG_FILE, self)
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
-        self.logging_enabled_checkbox = QCheckBox("Enable Logging")
-        self.logging_enabled_checkbox.setChecked(False)
-        self.logging_enabled_checkbox.stateChanged.connect(self.toggle_logging)
-        layout.addWidget(self.logging_enabled_checkbox)
-
-        self.log_options = {
-            "Startup/Shutdown Logs": QCheckBox("Startup/Shutdown Logs"),
-            "Registry Access Logs": QCheckBox("Registry Access Logs"),
-            "Success/Error Logs": QCheckBox("Success/Error Logs"),
-            "User Activity Logs": QCheckBox("User Activity Logs"),
-            "Configuration Changes": QCheckBox("Configuration Changes"),
-            "Audit Logs": QCheckBox("Audit Logs"),
-            "Performance Logs": QCheckBox("Performance Logs"),
-            "Security Logs": QCheckBox("Security Logs")
-        }
-
-        for key, checkbox in self.log_options.items():
-            checkbox.setChecked(False)
-            checkbox.stateChanged.connect(lambda state, key=key: self.change_log_type(state, key))
-            layout.addWidget(checkbox)
-
-        self.tab_widget.addTab(self.log_tab, "Settings")
-        self.toggle_logging(self.logging_enabled_checkbox.isChecked())  # Set initial state based on checkbox
-
-    def toggle_logging(self, state):
-        enable = state == Qt.Checked
-        for checkbox in self.log_options.values():
-            checkbox.setEnabled(enable)
-
-        if enable:
-            logging.disable(logging.NOTSET)
-            logging.info('Logging enabled')
-        else:
-            logging.disable(logging.CRITICAL)
-            logging.info('Logging disabled')
-
-    def change_log_type(self, state, key):
-        log_types = {
-            "Startup/Shutdown Logs": logging.INFO,
-            "Registry Access Logs": logging.INFO,
-            "Success/Error Logs": logging.INFO,
-            "User Activity Logs": logging.INFO,
-            "Configuration Changes": logging.INFO,
-            "Audit Logs": logging.WARNING,
-            "Performance Logs": logging.INFO,
-            "Security Logs": logging.WARNING
-        }
-
-        if state == Qt.Checked:
-            logging.getLogger(key).setLevel(log_types[key])
-            logging.info(f'{key} logging enabled')
-        else:
-            logging.getLogger(key).setLevel(logging.CRITICAL + 1)
-            logging.info(f'{key} logging disabled')
+    def on_tab_changed(self, index):
+        current_widget = self.tab_widget.widget(index)
+        if isinstance(current_widget, SettingsTab):
+            current_widget.load_preferences()  # Reload preferences when switching to the settings tab
 
     def setup_doc_tab(self):
         self.doc_tab = QWidget()
@@ -320,7 +277,11 @@ class DomainManagerGUI(QMainWindow):
         self.current_domain_label = QLabel("Brave Domain Manager is ready. Add or remove domains to block.")
         lower_layout.addWidget(self.current_domain_label)
 
-        self.theme_toggle_switch = AnimatedToggle(checked_color="#FFB000", pulse_checked_color="#00000000", pulse_unchecked_color="#00000000")
+        self.theme_toggle_switch = AnimatedToggle(
+            checked_color="#FFB000", 
+            pulse_checked_color="#00000000", 
+            pulse_unchecked_color="#00000000"
+        )
         self.theme_toggle_switch.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.theme_toggle_switch.setFixedSize(int(45 * self.logicalDpiX() / 96), int(32 * self.logicalDpiY() / 96))
         self.theme_toggle_switch.toggled.connect(self.on_theme_toggle)
@@ -332,14 +293,6 @@ class DomainManagerGUI(QMainWindow):
 
         self.main_layout.addWidget(lower_frame)
 
-    def apply_theme(self):
-        theme = "dark" if self.theme else "light"
-        qdarktheme.setup_theme(theme)
-        placeholder_color = "#CCCCCC" if self.theme else "#666666"
-        text_color = "white" if self.theme else "black"
-        self.add_entry.setStyleSheet(f"QLineEdit {{ color: {text_color}; }} QLineEdit::placeholder {{ color: {placeholder_color}; }} QLineEdit:focus {{ color: {text_color}; }}")
-        self.filepath_entry.setStyleSheet(f"QLineEdit {{ color: {text_color}; }} QLineEdit::placeholder {{ color: {placeholder_color}; }} QLineEdit:focus {{ color: {text_color}; }}")
-
     def prompt_for_logging(self):
         config = configparser.ConfigParser()
         config.read(CONFIG_FILE)
@@ -350,16 +303,14 @@ class DomainManagerGUI(QMainWindow):
                 title='Logging Enabled',
                 message='Logging is currently enabled. Would you like to disable it?',
                 notice='Disabling logging will restart the application.',
-                icon_path=ICON_PATH
             )
         else:
             prompt = CustomPrompt(
                 title='Enable Logging',
                 message='Would you like to enable logging?',
                 notice='Enabling logging will restart the application.',
-                icon_path=ICON_PATH
             )
-        
+        theme_manager.apply_theme(prompt, "prompt")
         result = prompt.exec_()
         self.handle_prompt_result('Logging', result, prompt.get_checkbox_state(), logging_enabled)
 
@@ -370,10 +321,10 @@ class DomainManagerGUI(QMainWindow):
     def prompt_for_theme(self):
         prompt = CustomPrompt(
             title='Set Default Theme',
-            message=f'Would you like to make the {"dark" if self.theme else "light"} theme your default theme?',
+            message=f'Would you like to make the {"dark" if theme_manager.theme else "light"} theme your default theme?',
             notice='You can change this later in the Settings tab.',
-            icon_path=ICON_PATH
         )
+        theme_manager.apply_theme(prompt, "prompt")
         result = prompt.exec_()
         self.handle_prompt_result('Theme', result, prompt.get_checkbox_state())
 
@@ -390,14 +341,14 @@ class DomainManagerGUI(QMainWindow):
                     dm_functions.save_preference(CONFIG_FILE, 'Logging', 'restart_for_logging', True)
                 self.restart_application()
             elif section == 'Theme':
-                dm_functions.save_preference(CONFIG_FILE, 'Theme', 'theme', self.theme)
+                dm_functions.save_preference(CONFIG_FILE, 'Theme', 'theme', theme_manager.theme)
 
     def on_theme_toggle(self, state):
         if self.is_initializing:
             return
 
-        self.theme = state
-        self.apply_theme()
+        theme_manager.theme = state
+        theme_manager.apply_theme(self, title_bar=self.title_bar)
 
         if self.show_prompt['Theme']:
             self.prompt_for_theme()
@@ -506,13 +457,13 @@ class DomainManagerGUI(QMainWindow):
             'Theme': {'theme': 'False', 'show_prompt': 'True'},
             'Logging': {'logging': 'False', 'show_prompt': 'True', 'restart_for_logging': 'False'}
         })
-        self.theme = preferences['Theme']['theme'] == 'True'
+        theme_manager.theme = preferences['Theme']['theme'] == 'True'
         self.show_prompt['Theme'] = preferences['Theme']['show_prompt'] == 'True'
-        self.theme_toggle_switch.setChecked(self.theme)
+        self.theme_toggle_switch.setChecked(theme_manager.theme)
 
         logging_enabled = preferences['Logging']['logging'] == 'True'
         self.show_prompt['Logging'] = preferences['Logging']['show_prompt'] == 'True'
-        self.logging_enabled_checkbox.setChecked(logging_enabled)
+        self.settings_tab.logging_enabled_checkbox.setChecked(logging_enabled)
 
         if preferences['Logging']['restart_for_logging'] == 'True':
             self.show_prompt['Logging'] = False
@@ -558,7 +509,7 @@ class DomainManagerGUI(QMainWindow):
 
         reply = QMessageBox.question(self, 'Confirmation', message, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            added_domains = []  # To keep track of added domains
+            added_domains = []
             for domain in domains:
                 result = self.perform_domain_action(domain, action_type)
                 self.update_feedback(result)
@@ -570,7 +521,6 @@ class DomainManagerGUI(QMainWindow):
             self.refresh_existing_domains()
             self.update_current_domain("", action_type, final_message=True, file_name=file_name)
             
-            # Highlight added domains in the existing domains list
             if action_type == "Add":
                 self.highlight_domains_in_list(added_domains)
 
@@ -643,9 +593,9 @@ class DomainManagerGUI(QMainWindow):
 
     def set_current_list(self, list_type):
         if list_type == 'existing':
-            self.reset_list('file')  # Reset the file list to display all domains
+            self.reset_list('file')
         elif list_type == 'file':
-            self.reset_list('existing')  # Reset the existing list to display all domains
+            self.reset_list('existing')
         self.current_list = list_type
 
     def get_current_list_and_cache(self):
@@ -670,7 +620,6 @@ class DomainManagerGUI(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    qdarktheme.setup_theme()
     gui = DomainManagerGUI()
     gui.show()
     logging.info('Application started')
