@@ -9,19 +9,20 @@ from PyQt5.QtGui import QColor, QIcon
 from theme_manager import theme_manager
 
 class AnimatedButton(QPushButton):
-    def __init__(self, icon_path, hover_color, click_color, default_color, *args, **kwargs):
+    def __init__(self, icon_path, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setIcon(theme_manager.update_icon(icon_path))
         self.setIconSize(theme_manager.ICON_SIZE)
         self.setFixedSize(theme_manager.BUTTON_SIZE)
-        self.hover_color = QColor(hover_color)
-        self.click_color = QColor(click_color)
-        self.default_color = QColor(default_color)
+        self.hover_color = QColor()
+        self.click_color = QColor()
+        self.default_color = QColor()
         self._current_color = self.default_color
         self.fade_in_animation = QPropertyAnimation(self, b"background_color")
         self.fade_out_animation = QPropertyAnimation(self, b"background_color")
         self.click_animation = QPropertyAnimation(self, b"background_color")
         self.setup_animations()
+        self.update_stylesheet()
 
     def setup_animations(self):
         self.fade_in_animation.setDuration(theme_manager.FADE_IN_DURATION)
@@ -57,13 +58,24 @@ class AnimatedButton(QPushButton):
     @background_color.setter
     def background_color(self, color):
         self._current_color = color
+        self.update_stylesheet()
+
+    def update_stylesheet(self):
+        self.setStyleSheet(f"background-color: {self._current_color.name()};")
+
+    def update_button_colors(self, colors):
+        self.default_color = QColor(colors["default_color"])
+        self.hover_color = QColor(colors["hover_color"])
+        self.click_color = QColor(colors["click_color_default"])
+        self._current_color = self.default_color 
+        self.update_stylesheet()
 
 class CustomTitleBar(QWidget):
     def __init__(self, parent=None, app_icon_path=None, title="Application"):
         super().__init__(parent)
         self.setFixedHeight(theme_manager.TITLE_BAR_HEIGHT)
         self.init_ui(app_icon_path, title)
-        self.apply_theme()
+        theme_manager.apply_theme(self, "title_bar", title_bar=self)
 
     def init_ui(self, app_icon_path, title):
         self.layout = QHBoxLayout(self)
@@ -87,12 +99,10 @@ class CustomTitleBar(QWidget):
         self.layout.addLayout(icon_layout)
         self.layout.addWidget(self.title_label)
 
-        colors = theme_manager.get_title_bar_colors()
-
-        self.btn_minimize = AnimatedButton('icons/dash-lg.svg', colors['hover_color'], colors['click_color_default'], colors['default_color'])
-        self.btn_maximize = AnimatedButton('icons/fullscreen.svg', colors['hover_color'], colors['click_color_default'], colors['default_color'])
-        self.btn_restore = AnimatedButton('icons/fullscreen-exit.svg', colors['hover_color'], colors['click_color_default'], colors['default_color'])
-        self.btn_close = AnimatedButton('icons/x-lg.svg', colors['hover_color_close'], colors['click_color_close'], colors['default_color'])
+        self.btn_minimize = AnimatedButton('icons/dash-lg.svg')
+        self.btn_maximize = AnimatedButton('icons/fullscreen.svg')
+        self.btn_restore = AnimatedButton('icons/fullscreen-exit.svg')
+        self.btn_close = AnimatedButton('icons/x-lg.svg')
 
         self.layout.addWidget(self.btn_minimize)
         self.layout.addWidget(self.btn_maximize)
@@ -112,16 +122,6 @@ class CustomTitleBar(QWidget):
         self.start_pos = None
         self.is_maximized = False
         self.btn_restore.hide()
-
-    def apply_theme(self):
-        theme_manager.apply_theme(self, "title_bar")
-        self.update_button_icons()
-
-    def update_button_icons(self):
-        self.btn_minimize.setIcon(theme_manager.update_icon('icons/dash-lg.svg'))
-        self.btn_maximize.setIcon(theme_manager.update_icon('icons/fullscreen.svg'))
-        self.btn_restore.setIcon(theme_manager.update_icon('icons/fullscreen-exit.svg'))
-        self.btn_close.setIcon(theme_manager.update_icon('icons/x-lg.svg'))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

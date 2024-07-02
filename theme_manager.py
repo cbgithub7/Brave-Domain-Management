@@ -29,10 +29,13 @@ class ThemeManager:
             self.theme = theme
         qdarktheme.setup_theme("dark" if self.theme else "light")
         self.generate_stylesheets()
+
         if widget is not None:
             widget.setStyleSheet(self.stylesheets[stylesheet_key])
+
         if title_bar is not None:
-            title_bar.apply_theme()
+            title_bar.setStyleSheet(self.stylesheets["title_bar"])
+            self.update_title_bar_buttons(title_bar)
 
     def generate_stylesheets(self):
         self.stylesheets = {
@@ -128,24 +131,22 @@ class ThemeManager:
 
     def get_title_bar_colors(self):
         if self.theme:
-            return {
+            return { # Colors for dark theme
                 "text_color": "#FFFFFF",
                 "default_color": "#202124",
                 "hover_color": "#555555",
                 "click_color_default": "#686868",
                 "hover_color_close": "#E81123",
                 "click_color_close": "#94141E",
-                "icon_prefix": "dark"
             }
         else:
-            return {
+            return { # Colors for light theme
                 "text_color": "#000000",
                 "default_color": "#F8F9FA",
                 "hover_color": "#BBBBBB",
                 "click_color_default": "#999999",
                 "hover_color_close": "#E81123",
                 "click_color_close": "#94141E",
-                "icon_prefix": "light"
             }
 
     def get_icon_fill_color(self):
@@ -162,6 +163,22 @@ class ThemeManager:
         painter.fillRect(image.rect(), QColor(fill_color))
         painter.end()
         return QIcon(image)
+
+    def update_title_bar_buttons(self, title_bar):
+        title_bar.btn_minimize.setIcon(self.update_icon('icons/dash-lg.svg'))
+        title_bar.btn_maximize.setIcon(self.update_icon('icons/fullscreen.svg'))
+        title_bar.btn_restore.setIcon(self.update_icon('icons/fullscreen-exit.svg'))
+        title_bar.btn_close.setIcon(self.update_icon('icons/x-lg.svg'))
+
+        colors = self.get_title_bar_colors()
+        title_bar.btn_minimize.update_button_colors(colors)
+        title_bar.btn_maximize.update_button_colors(colors)
+        title_bar.btn_restore.update_button_colors(colors)
+        title_bar.btn_close.update_button_colors({
+            "default_color": colors["default_color"],
+            "hover_color": colors["hover_color_close"],
+            "click_color_default": colors["click_color_close"]
+        })
 
     def get_font(self):
         return QFont(self.FONT_FAMILY, self.FONT_SIZE)

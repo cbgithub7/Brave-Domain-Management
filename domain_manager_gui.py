@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QListWidget, QFileDialog,
     QSizePolicy, QDesktopWidget, QAbstractItemView, QTabWidget,
-    QMessageBox, QCheckBox, QDialog
+    QMessageBox, QDialog
 )
 from PyQt5.QtCore import Qt, QSize, QEventLoop, QEvent, QUrl, QTimer, QProcess
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -348,7 +348,7 @@ class DomainManagerGUI(QMainWindow):
             return
 
         theme_manager.theme = state
-        theme_manager.apply_theme(self, title_bar=self.title_bar)
+        theme_manager.apply_theme(self, "main", title_bar=self.title_bar)
 
         if self.show_prompt['Theme']:
             self.prompt_for_theme()
